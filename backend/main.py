@@ -4,8 +4,9 @@ from pydantic import BaseModel
 from typing import List
 import pandas as pd
 from ml_model import RiskPredictor
-from backend.data_pipeline import CrimeDataLoader
+from data_pipeline import CrimeDataLoader
 import uvicorn
+import os
 
 app = FastAPI(title="Safe Routes API", version="1.0.0")
 
@@ -18,8 +19,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializar modelo
-predictor = RiskPredictor()
+# Variable global para el predictor
+predictor = None
+
+# 🚀 EVENTO DE STARTUP - AUTO-INICIALIZACIÓN
+@app.on_event("startup")
+async def startup_event():
+    """Inicializa el modelo automáticamente al arrancar el servidor"""
+    global predictor
+    
+    print("🚀 Iniciando Safe Routes API...")
+    print("=" * 50)
+    
+    try:
+        # Crear directorio de datos si no existe
+        os.makedirs('data', exist_ok=True)
+        
+        # Inicializar predictor con auto-construcción
+        print("🤖 Inicializando modelo de IA...")
+        predictor = RiskPredictor(auto_build=True)
+        
+        print("=" * 50)
+        print("✅ Safe Routes API lista para usar!")
+        print(f"📍 Municipios disponibles: {len(predictor.municipio_to_id)}")
+        print("🌐 Documentación: http://localhost:8000/docs")
+        print("=" * 50)
+        
+    except Exception as e:
+        print(f"❌ Error en startup: {e}")
+        print("🔧 Creando predictor básico...")
+        predictor = RiskPredictor(auto_build=False)
+        
+        # Intentar crear modelo básico
+        try:
+            predictor._create_fallback_model()
+            print("✅ Modelo básico creado como fallback")
+        except Exception as fallback_error:
+            print(f"❌ Error crítico: {fallback_error}")
+            raise
 
 # Modelos de datos
 class RiskRequest(BaseModel):
@@ -65,11 +102,42 @@ LOCALIDADES_COORDS = {
 
 @app.get("/")
 async def root():
-    return {"message": "Safe Routes API funcionando! 🛡️"}
+    return {
+        "message": "Safe Routes API funcionando! 🛡️",
+        "status": "✅ Modelo cargado" if predictor and predictor.model else "⚠️ Modelo no disponible",
+        "municipios": len(predictor.municipio_to_id) if predictor else 0
+    }
+
+@app.get("/health")
+async def health_check():
+    """Endpoint de salud del sistema"""
+    global predictor
+    
+    model_status = "❌ No cargado"
+    municipios_count = 0
+    
+    if predictor:
+        if predictor.model is not None:
+            model_status = "✅ Funcionando"
+            municipios_count = len(predictor.municipio_to_id)
+        else:
+            model_status = "⚠️ Cargado pero sin modelo"
+    
+    return {
+        "api_status": "✅ Online",
+        "model_status": model_status,
+        "municipios_disponibles": municipios_count,
+        "data_directory": "✅ Existe" if os.path.exists('data') else "❌ No existe"
+    }
 
 @app.post("/predict-risk", response_model=RiskResponse)
 async def predict_risk(request: RiskRequest):
     """Predice riesgo criminal para una zona-hora específica"""
+    global predictor
+    
+    if not predictor:
+        raise HTTPException(status_code=503, detail="Modelo no disponible")
+    
     try:
         risk_score = predictor.predict_risk(
             request.municipio, 
@@ -99,6 +167,11 @@ async def predict_risk(request: RiskRequest):
 @app.get("/risk-map")
 async def get_risk_map(hora: int = 12, dia_semana: int = 1):
     """Obtiene mapa de riesgo para todas las localidades en una hora específica"""
+    global predictor
+    
+    if not predictor:
+        raise HTTPException(status_code=503, detail="Modelo no disponible")
+        
     risk_map = []
     
     for localidad, coords in LOCALIDADES_COORDS.items():
@@ -117,12 +190,22 @@ async def get_risk_map(hora: int = 12, dia_semana: int = 1):
 @app.post("/smart-route")
 async def get_smart_route(request: RouteRequest):
     """Calcula ruta inteligente evitando zonas de alto riesgo"""
+    global predictor
+    
+    if not predictor:
+        raise HTTPException(status_code=503, detail="Modelo no disponible")
+        
     # Para MVP: ruta simple que evita zonas de riesgo alto
     origen_coords = LOCALIDADES_COORDS.get(request.origen.upper())
     destino_coords = LOCALIDADES_COORDS.get(request.destino.upper())
     
     if not origen_coords or not destino_coords:
         raise HTTPException(status_code=400, detail="Localidad no encontrada")
+    
+    # Calcular riesgo promedio de la ruta
+    risk_origen = predictor.predict_risk(request.origen, request.hora, request.dia_semana)
+    risk_destino = predictor.predict_risk(request.destino, request.hora, request.dia_semana)
+    risk_promedio = (risk_origen + risk_destino) / 2
     
     # Simular ruta (en proyecto real usarías OSRM o Google Directions)
     ruta = {
@@ -131,30 +214,54 @@ async def get_smart_route(request: RouteRequest):
         "puntos_intermedios": [],
         "distancia_km": 10.5,
         "tiempo_minutos": 25,
-        "risk_score_promedio": 0.4
+        "risk_score_promedio": risk_promedio,
+        "recomendacion": "Ruta segura" if risk_promedio < 0.4 else "Ruta con precaución" if risk_promedio < 0.7 else "Ruta peligrosa - considere alternativas"
     }
     
     return ruta
 
+@app.get("/rebuild-model")
+async def rebuild_model():
+    """Endpoint para reconstruir el modelo manualmente"""
+    global predictor
+    
+    try:
+        print("🔧 Reconstruyendo modelo manualmente...")
+        
+        # Crear nuevo predictor con auto-construcción
+        predictor = RiskPredictor(auto_build=True)
+        
+        return {
+            "message": "Modelo reconstruido exitosamente!",
+            "municipios": len(predictor.municipio_to_id),
+            "status": "✅ Listo para usar"
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reconstruyendo modelo: {str(e)}")
+
 @app.get("/train-model")
 async def train_model():
-    """Endpoint para entrenar/re-entrenar el modelo (útil para demo)"""
+    """Endpoint para entrenar/re-entrenar el modelo con datos reales (si existen)"""
+    global predictor
+    
     try:
         loader = CrimeDataLoader()
         
-        # Cargar datos
+        # Cargar datos reales si existen
         raw_data = loader.download_bogota_crime_data()
         if raw_data is None:
-            raise HTTPException(status_code=500, detail="Error descargando datos")
+            # Si no hay datos reales, usar auto-construcción
+            predictor = RiskPredictor(auto_build=True)
+            return {"message": "Entrenado con datos sintéticos balanceados!", "samples": 3000}
         
         clean_data = loader.clean_data(raw_data)
         
         # Entrenar modelo
-        global predictor
-        predictor = RiskPredictor()
+        predictor = RiskPredictor(auto_build=False)
         predictor.train_model(clean_data)
         
-        return {"message": "Modelo entrenado exitosamente!", "samples": len(clean_data)}
+        return {"message": "Modelo entrenado con datos reales!", "samples": len(clean_data)}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error entrenando modelo: {str(e)}")

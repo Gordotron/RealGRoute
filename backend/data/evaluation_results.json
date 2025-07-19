@@ -1,0 +1,143 @@
+{
+  "basic_metrics": {
+    "accuracy": 0.9766666666666667,
+    "precision_macro": 0.9779854224934317,
+    "precision_weighted": 0.9768220149627473,
+    "recall_macro": 0.9739778525905693,
+    "recall_weighted": 0.9766666666666667,
+    "f1_macro": 0.9757959124184582,
+    "f1_weighted": 0.9765491612198218
+  },
+  "class_metrics": {
+    "Bajo": {
+      "precision": 0.9683794466403162,
+      "recall": 1.0,
+      "f1-score": 0.9839357429718876,
+      "support": 245.0
+    },
+    "Medio": {
+      "precision": 0.9772727272727273,
+      "recall": 0.945054945054945,
+      "f1-score": 0.9608938547486033,
+      "support": 182.0
+    },
+    "Alto": {
+      "precision": 0.9883040935672515,
+      "recall": 0.976878612716763,
+      "f1-score": 0.9825581395348837,
+      "support": 173.0
+    },
+    "accuracy": 0.9766666666666667,
+    "macro avg": {
+      "precision": 0.9779854224934317,
+      "recall": 0.9739778525905693,
+      "f1-score": 0.9757959124184582,
+      "support": 600.0
+    },
+    "weighted avg": {
+      "precision": 0.9768220149627473,
+      "recall": 0.9766666666666667,
+      "f1-score": 0.9765491612198218,
+      "support": 600.0
+    }
+  },
+  "confusion_matrix": {
+    "confusion_matrix": [
+      [
+        245,
+        0,
+        0
+      ],
+      [
+        8,
+        172,
+        2
+      ],
+      [
+        0,
+        4,
+        169
+      ]
+    ],
+    "total_samples": 600,
+    "critical_errors": 0,
+    "critical_error_rate": 0.0,
+    "moderate_errors": 14,
+    "moderate_error_rate": 0.023333333333333334
+  },
+  "error_analysis": {
+    "total_errors": 14,
+    "error_rate": 0.023333333333333334,
+    "error_patterns": {
+      "municipios_problematicos": {
+        "LOS MARTIRES": 5,
+        "KENNEDY": 2,
+        "SAN CRISTOBAL": 2,
+        "ANTONIO NARI\u00d1O": 1,
+        "PUENTE ARANDA": 1
+      },
+      "horas_problematicas": {
+        "8": 5,
+        "6": 2,
+        "10": 2,
+        "9": 1,
+        "15": 1
+      }
+    },
+    "critical_errors_detail": [],
+    "errors_by_real_class": {
+      "1": 10,
+      "2": 4
+    },
+    "errors_by_predicted_class": {
+      "0": 8,
+      "1": 4,
+      "2": 2
+    }
+  },
+  "feature_importance": {
+    "feature_importance": [
+      {
+        "feature": "municipio_encoded",
+        "importance": 0.46645509336544005
+      },
+      {
+        "feature": "es_fin_semana",
+        "importance": 0.13831489310106382
+      },
+      {
+        "feature": "hora",
+        "importance": 0.12748432550141478
+      },
+      {
+        "feature": "dia_semana",
+        "importance": 0.11947442140777395
+      },
+      {
+        "feature": "es_nocturno",
+        "importance": 0.11641121209121623
+      },
+      {
+        "feature": "mes",
+        "importance": 0.03186005453309129
+      }
+    ],
+    "top_feature": "municipio_encoded",
+    "top_importance": 0.46645509336544005
+  },
+  "confidence_analysis": {
+    "avg_confidence_correct": 0.9052786530826615,
+    "avg_confidence_incorrect": 0.6204549179248373,
+    "high_confidence_threshold": 0.8,
+    "high_confidence_predictions": 520,
+    "high_confidence_accuracy": 1.0
+  },
+  "safety_metrics": {
+    "alto_precision": 0.9883040935672515,
+    "alto_recall": 0.976878612716763,
+    "critical_miss_rate": 0.0,
+    "critical_misses": 0,
+    "total_alto_cases": 173,
+    "safety_score": 1.0
+  }
+}
