@@ -26,11 +26,11 @@ const COLORS = {
   shadow: '#C8D6E5',
 };
 
-// 📍 TODAS LAS 20 LOCALIDADES DE BOGOTÁ CON COORDENADAS PRECISAS
+// 📍 TODAS LAS 20 LOCALIDADES DE BOGOTÁ CON COORDENADAS PRECISAS Y RIESGO BASE
 const BOGOTA_LOCALIDADES = [
   {
     id: 1,
-    name: 'Usaquén',
+    name: 'USAQUÉN',
     latitude: 4.7030,
     longitude: -74.0350,
     riskScore: 0.15,
@@ -38,7 +38,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 2,
-    name: 'Chapinero',
+    name: 'CHAPINERO',
     latitude: 4.6590,
     longitude: -74.0630,
     riskScore: 0.18,
@@ -46,7 +46,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 3,
-    name: 'Santa Fe',
+    name: 'SANTA FE',
     latitude: 4.6080,
     longitude: -74.0760,
     riskScore: 0.25,
@@ -54,7 +54,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 4,
-    name: 'San Cristóbal',
+    name: 'SAN CRISTÓBAL',
     latitude: 4.5570,
     longitude: -74.0820,
     riskScore: 0.55,
@@ -62,7 +62,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 5,
-    name: 'Usme',
+    name: 'USME',
     latitude: 4.4790,
     longitude: -74.1260,
     riskScore: 0.48,
@@ -70,7 +70,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 6,
-    name: 'Tunjuelito',
+    name: 'TUNJUELITO',
     latitude: 4.5720,
     longitude: -74.1320,
     riskScore: 0.42,
@@ -78,7 +78,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 7,
-    name: 'Bosa',
+    name: 'BOSA',
     latitude: 4.6180,
     longitude: -74.1770,
     riskScore: 0.40,
@@ -86,7 +86,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 8,
-    name: 'Kennedy',
+    name: 'KENNEDY',
     latitude: 4.6280,
     longitude: -74.1460,
     riskScore: 0.38,
@@ -94,7 +94,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 9,
-    name: 'Fontibón',
+    name: 'FONTIBÓN',
     latitude: 4.6680,
     longitude: -74.1460,
     riskScore: 0.20,
@@ -102,7 +102,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 10,
-    name: 'Engativá',
+    name: 'ENGATIVÁ',
     latitude: 4.6900,
     longitude: -74.1180,
     riskScore: 0.18,
@@ -110,7 +110,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 11,
-    name: 'Suba',
+    name: 'SUBA',
     latitude: 4.7560,
     longitude: -74.0840,
     riskScore: 0.16,
@@ -118,7 +118,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 12,
-    name: 'Barrios Unidos',
+    name: 'BARRIOS UNIDOS',
     latitude: 4.6670,
     longitude: -74.0840,
     riskScore: 0.19,
@@ -126,7 +126,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 13,
-    name: 'Teusaquillo',
+    name: 'TEUSAQUILLO',
     latitude: 4.6310,
     longitude: -74.0920,
     riskScore: 0.17,
@@ -134,7 +134,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 14,
-    name: 'Los Mártires',
+    name: 'LOS MÁRTIRES',
     latitude: 4.6040,
     longitude: -74.0900,
     riskScore: 0.30,
@@ -142,7 +142,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 15,
-    name: 'Antonio Nariño',
+    name: 'ANTONIO NARIÑO',
     latitude: 4.5940,
     longitude: -74.0990,
     riskScore: 0.22,
@@ -150,7 +150,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 16,
-    name: 'Puente Aranda',
+    name: 'PUENTE ARANDA',
     latitude: 4.6160,
     longitude: -74.1140,
     riskScore: 0.24,
@@ -158,7 +158,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 17,
-    name: 'La Candelaria',
+    name: 'LA CANDELARIA',
     latitude: 4.5970,
     longitude: -74.0750,
     riskScore: 0.35,
@@ -166,7 +166,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 18,
-    name: 'Rafael Uribe Uribe',
+    name: 'RAFAEL URIBE URIBE',
     latitude: 4.5580,
     longitude: -74.1060,
     riskScore: 0.50,
@@ -174,7 +174,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 19,
-    name: 'Ciudad Bolívar',
+    name: 'CIUDAD BOLÍVAR',
     latitude: 4.4940,
     longitude: -74.1430,
     riskScore: 0.75,
@@ -182,7 +182,7 @@ const BOGOTA_LOCALIDADES = [
   },
   {
     id: 20,
-    name: 'Sumapaz',
+    name: 'SUMAPAZ',
     latitude: 4.2700,
     longitude: -74.2400,
     riskScore: 0.25,
@@ -254,41 +254,66 @@ export default function MapScreen() {
   // Hora de Colombia (UTC-5)
   const currentHour = currentTime.getHours();
   const currentMinute = currentTime.getMinutes();
+  const isNight = currentHour >= 18 || currentHour <= 6;
 
-  // 🎯 Función para obtener color según riesgo
+  // 🎯 Función para obtener color según riesgo - CORREGIDA
   const getRiskColor = (riskScore: number) => {
-    // Ajustar riesgo según hora del día
+    // 🚀 APLICAR FACTOR NOCTURNO AQUÍ UNA SOLA VEZ
     let adjustedScore = riskScore;
-    if (currentHour >= 18 || currentHour <= 6) {
-      adjustedScore += 0.2; // Más riesgo en la noche
+    if (isNight) {
+      adjustedScore = Math.min(riskScore + 0.2, 1.0); // +20% nocturno, máximo 100%
     }
+    
+    console.log(`🎨 Color for ${riskScore.toFixed(3)} -> ${adjustedScore.toFixed(3)} (night: ${isNight})`);
     
     if (adjustedScore < 0.3) return COLORS.safe;
     if (adjustedScore < 0.6) return COLORS.warning;
     return COLORS.danger;
   };
 
-  // 🎯 Función para obtener texto de riesgo
+  // 🎯 Función para obtener texto de riesgo - CORREGIDA
   const getRiskText = (riskScore: number) => {
+    // 🚀 APLICAR FACTOR NOCTURNO AQUÍ UNA SOLA VEZ
     let adjustedScore = riskScore;
-    if (currentHour >= 18 || currentHour <= 6) {
-      adjustedScore += 0.2;
+    if (isNight) {
+      adjustedScore = Math.min(riskScore + 0.2, 1.0);
     }
+    
+    console.log(`📝 Text for ${riskScore.toFixed(3)} -> ${adjustedScore.toFixed(3)} (night: ${isNight})`);
     
     if (adjustedScore < 0.3) return 'SEGURO';
     if (adjustedScore < 0.6) return 'PRECAUCIÓN';
     return 'ALTO RIESGO';
   };
 
-  // 🎯 Manejo de selección de zona
+  // 🎯 Función para obtener score ajustado (para mostrar en UI)
+  const getAdjustedScore = (riskScore: number) => {
+    let adjustedScore = riskScore;
+    if (isNight) {
+      adjustedScore = Math.min(riskScore + 0.2, 1.0);
+    }
+    return adjustedScore;
+  };
+
+  // 🎯 Manejo de selección de zona - CORREGIDO
   const handleZonePress = (localidad) => {
     setSelectedZone(localidad);
+    
+    // 🚀 CALCULAR UNA SOLA VEZ EL SCORE AJUSTADO
+    const adjustedScore = getAdjustedScore(localidad.riskScore);
     const riskText = getRiskText(localidad.riskScore);
-    const adjustedScore = localidad.riskScore + (currentHour >= 18 || currentHour <= 6 ? 0.2 : 0);
+    const displayScore = Math.min(adjustedScore * 100, 100).toFixed(0);
+
+    console.log(`🔍 Zone pressed: ${localidad.name}`);
+    console.log(`  Base risk: ${localidad.riskScore.toFixed(3)}`);
+    console.log(`  Adjusted: ${adjustedScore.toFixed(3)}`);
+    console.log(`  Display: ${displayScore}%`);
+    console.log(`  Level: ${riskText}`);
+    console.log(`  Night: ${isNight}`);
 
     Alert.alert(
       `📍 ${localidad.name}`,
-      `🛡️ Nivel: ${riskText}\n📊 Score: ${Math.min(adjustedScore * 100, 100).toFixed(0)}%\n🕐 Hora: ${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}\n📝 ${localidad.description}`,
+      `🛡️ Nivel: ${riskText}\n📊 Score: ${displayScore}%\n🕐 Hora: ${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}\n${isNight ? '🌙 Factor nocturno aplicado (+20%)\n' : '☀️ Horario diurno\n'}📝 ${localidad.description}`,
       [
         { text: 'Cerrar', style: 'cancel' },
         { 
@@ -324,32 +349,38 @@ export default function MapScreen() {
         loadingEnabled={true}
       >
         {/* 📍 TODAS LAS 20 LOCALIDADES con círculos de riesgo */}
-        {BOGOTA_LOCALIDADES.map((localidad) => (
-          <React.Fragment key={localidad.id}>
-            {/* Círculo de riesgo */}
-            <Circle
-              center={{
-                latitude: localidad.latitude,
-                longitude: localidad.longitude,
-              }}
-              radius={1500} // 1.5km radius (más pequeño para mejor visualización)
-              fillColor={`${getRiskColor(localidad.riskScore)}20`} // Más transparente
-              strokeColor={getRiskColor(localidad.riskScore)}
-              strokeWidth={2}
-            />
-            
-            {/* Marcador principal */}
-            <Marker
-              coordinate={{
-                latitude: localidad.latitude,
-                longitude: localidad.longitude,
-              }}
-              onPress={() => handleZonePress(localidad)}
-              title={localidad.name}
-              description={getRiskText(localidad.riskScore)}
-            />
-          </React.Fragment>
-        ))}
+        {BOGOTA_LOCALIDADES.map((localidad) => {
+          // 🚀 CALCULAR COLOR Y SCORE AJUSTADO UNA SOLA VEZ
+          const adjustedScore = getAdjustedScore(localidad.riskScore);
+          const circleColor = getRiskColor(localidad.riskScore);
+          
+          return (
+            <React.Fragment key={localidad.id}>
+              {/* Círculo de riesgo */}
+              <Circle
+                center={{
+                  latitude: localidad.latitude,
+                  longitude: localidad.longitude,
+                }}
+                radius={1500} // 1.5km radius
+                fillColor={`${circleColor}20`} // Transparente
+                strokeColor={circleColor}
+                strokeWidth={2}
+              />
+              
+              {/* Marcador principal */}
+              <Marker
+                coordinate={{
+                  latitude: localidad.latitude,
+                  longitude: localidad.longitude,
+                }}
+                onPress={() => handleZonePress(localidad)}
+                title={localidad.name}
+                description={`${getRiskText(localidad.riskScore)} (${(adjustedScore * 100).toFixed(0)}%)`}
+              />
+            </React.Fragment>
+          );
+        })}
       </MapView>
 
       {/* 🎨 Header con gradiente */}
@@ -367,12 +398,13 @@ export default function MapScreen() {
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>🗺️ Mapa de Riesgo</Text>
           <Text style={styles.headerSubtitle}>
-            Colombia: {currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')} {currentHour >= 18 || currentHour <= 6 ? '🌙' : '☀️'}
+            Colombia: {currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')} {isNight ? '🌙' : '☀️'}
+            {isNight ? ' - Factor Nocturno Activo' : ' - Horario Diurno'}
           </Text>
         </View>
       </LinearGradient>
 
-      {/* 📊 Panel de leyenda MEJORADO */}
+      {/* 📊 Panel de leyenda MEJORADO CON CONSISTENCIA */}
       <View style={styles.legendPanel}>
         <Text style={styles.legendTitle}>🛡️ Niveles de Riesgo</Text>
         
@@ -391,22 +423,38 @@ export default function MapScreen() {
           <Text style={styles.legendText}>Alto Riesgo (60%+)</Text>
         </View>
         
-        <Text style={styles.legendFooter}>🌙 +20% riesgo nocturno</Text>
+        <Text style={styles.legendFooter}>
+          {isNight ? '🌙 +20% riesgo nocturno aplicado' : '☀️ Valores base diurnos'}
+        </Text>
       </View>
 
-      {/* 🚀 Botón de acción flotante */}
-      <TouchableOpacity style={styles.fabButton}>
+      {/* 🚀 Botón de acción flotante CON DEBUG */}
+      <TouchableOpacity 
+        style={styles.fabButton}
+        onPress={() => {
+          // 🔍 DEBUG INFO
+          const engativa = BOGOTA_LOCALIDADES.find(l => l.name === 'ENGATIVÁ');
+          if (engativa) {
+            const adjustedScore = getAdjustedScore(engativa.riskScore);
+            Alert.alert(
+              '🔍 Debug ENGATIVÁ',
+              `Base: ${(engativa.riskScore * 100).toFixed(0)}%\nAjustado: ${(adjustedScore * 100).toFixed(0)}%\nNoche: ${isNight}\nNivel: ${getRiskText(engativa.riskScore)}\nColor: ${getRiskColor(engativa.riskScore) === COLORS.safe ? '🟢' : getRiskColor(engativa.riskScore) === COLORS.warning ? '🟡' : '🔴'}`
+            );
+          }
+        }}
+      >
         <LinearGradient
           colors={[COLORS.accent, '#9575CD']}
           style={styles.fabGradient}
         >
-          <Text style={styles.fabText}>🤖</Text>
+          <Text style={styles.fabText}>🔍</Text>
         </LinearGradient>
       </TouchableOpacity>
 
       {/* 📍 Contador de localidades */}
       <View style={styles.counterBadge}>
         <Text style={styles.counterText}>20 Localidades</Text>
+        <Text style={styles.counterSubtext}>{isNight ? '🌙 Nocturno' : '☀️ Diurno'}</Text>
       </View>
     </View>
   );
@@ -462,6 +510,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.primaryText,
     opacity: 0.8,
+    textAlign: 'center',
   },
 
   // 📊 Leyenda MEJORADA
@@ -532,24 +581,30 @@ const styles = StyleSheet.create({
     fontSize: 24,
   },
 
-  // 📍 Counter Badge
+  // 📍 Counter Badge ACTUALIZADO
   counterBadge: {
     position: 'absolute',
     top: 120,
     right: 20,
     backgroundColor: COLORS.accent,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 15,
     shadowColor: COLORS.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 4,
+    alignItems: 'center',
   },
   counterText: {
     color: COLORS.lightText,
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  counterSubtext: {
+    color: COLORS.lightText,
+    fontSize: 10,
+    opacity: 0.8,
   },
 });
