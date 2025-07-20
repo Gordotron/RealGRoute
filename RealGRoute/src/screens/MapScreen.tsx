@@ -10,6 +10,7 @@ import {
 import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { globalMLData, globalDataSource, globalLoadTime } from './HomeScreen';
 
 const { width, height } = Dimensions.get('window');
 
@@ -25,170 +26,6 @@ const COLORS = {
   cardBg: '#FFFFFF',
   shadow: '#C8D6E5',
 };
-
-// 📍 TODAS LAS 20 LOCALIDADES DE BOGOTÁ CON COORDENADAS PRECISAS Y RIESGO BASE
-const BOGOTA_LOCALIDADES = [
-  {
-    id: 1,
-    name: 'USAQUÉN',
-    latitude: 4.7030,
-    longitude: -74.0350,
-    riskScore: 0.15,
-    description: 'Zona norte segura y comercial',
-  },
-  {
-    id: 2,
-    name: 'CHAPINERO',
-    latitude: 4.6590,
-    longitude: -74.0630,
-    riskScore: 0.18,
-    description: 'Zona comercial y residencial segura',
-  },
-  {
-    id: 3,
-    name: 'SANTA FE',
-    latitude: 4.6080,
-    longitude: -74.0760,
-    riskScore: 0.25,
-    description: 'Centro histórico con precaución nocturna',
-  },
-  {
-    id: 4,
-    name: 'SAN CRISTÓBAL',
-    latitude: 4.5570,
-    longitude: -74.0820,
-    riskScore: 0.55,
-    description: 'Zona sur con vigilancia moderada',
-  },
-  {
-    id: 5,
-    name: 'USME',
-    latitude: 4.4790,
-    longitude: -74.1260,
-    riskScore: 0.48,
-    description: 'Periferia sur con precaución',
-  },
-  {
-    id: 6,
-    name: 'TUNJUELITO',
-    latitude: 4.5720,
-    longitude: -74.1320,
-    riskScore: 0.42,
-    description: 'Zona residencial sur',
-  },
-  {
-    id: 7,
-    name: 'BOSA',
-    latitude: 4.6180,
-    longitude: -74.1770,
-    riskScore: 0.40,
-    description: 'Zona residencial occidental',
-  },
-  {
-    id: 8,
-    name: 'KENNEDY',
-    latitude: 4.6280,
-    longitude: -74.1460,
-    riskScore: 0.38,
-    description: 'Gran localidad occidental',
-  },
-  {
-    id: 9,
-    name: 'FONTIBÓN',
-    latitude: 4.6680,
-    longitude: -74.1460,
-    riskScore: 0.20,
-    description: 'Zona aeroportuaria segura',
-  },
-  {
-    id: 10,
-    name: 'ENGATIVÁ',
-    latitude: 4.6900,
-    longitude: -74.1180,
-    riskScore: 0.18,
-    description: 'Zona noroccidental segura',
-  },
-  {
-    id: 11,
-    name: 'SUBA',
-    latitude: 4.7560,
-    longitude: -74.0840,
-    riskScore: 0.16,
-    description: 'Zona norte residencial tranquila',
-  },
-  {
-    id: 12,
-    name: 'BARRIOS UNIDOS',
-    latitude: 4.6670,
-    longitude: -74.0840,
-    riskScore: 0.19,
-    description: 'Zona central norte',
-  },
-  {
-    id: 13,
-    name: 'TEUSAQUILLO',
-    latitude: 4.6310,
-    longitude: -74.0920,
-    riskScore: 0.17,
-    description: 'Zona central segura',
-  },
-  {
-    id: 14,
-    name: 'LOS MÁRTIRES',
-    latitude: 4.6040,
-    longitude: -74.0900,
-    riskScore: 0.30,
-    description: 'Centro con precaución',
-  },
-  {
-    id: 15,
-    name: 'ANTONIO NARIÑO',
-    latitude: 4.5940,
-    longitude: -74.0990,
-    riskScore: 0.22,
-    description: 'Zona central sur',
-  },
-  {
-    id: 16,
-    name: 'PUENTE ARANDA',
-    latitude: 4.6160,
-    longitude: -74.1140,
-    riskScore: 0.24,
-    description: 'Zona industrial y comercial',
-  },
-  {
-    id: 17,
-    name: 'LA CANDELARIA',
-    latitude: 4.5970,
-    longitude: -74.0750,
-    riskScore: 0.35,
-    description: 'Centro histórico turístico',
-  },
-  {
-    id: 18,
-    name: 'RAFAEL URIBE URIBE',
-    latitude: 4.5580,
-    longitude: -74.1060,
-    riskScore: 0.50,
-    description: 'Zona suroriental',
-  },
-  {
-    id: 19,
-    name: 'CIUDAD BOLÍVAR',
-    latitude: 4.4940,
-    longitude: -74.1430,
-    riskScore: 0.75,
-    description: 'Zona sur con alto riesgo nocturno',
-  },
-  {
-    id: 20,
-    name: 'SUMAPAZ',
-    latitude: 4.2700,
-    longitude: -74.2400,
-    riskScore: 0.25,
-    description: 'Zona rural montañosa',
-  },
-];
 
 // 🗺️ Estilo de mapa MEJORADO con más detalles
 const mapStyleDetailed = [
@@ -243,77 +80,90 @@ export default function MapScreen() {
   // ⏰ HORA CORRECTA COLOMBIA (UTC-5)
   const [currentTime, setCurrentTime] = useState(new Date());
   
+  // 🚀 ESTADO PARA DATOS COMPARTIDOS
+  const [localidadesML, setLocalidadesML] = useState<any[]>([]);
+  const [dataSource, setDataSource] = useState<string>('unknown');
+  const [isLoading, setIsLoading] = useState(false);
+  
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 60000); // Actualizar cada minuto
+    }, 60000);
     
     return () => clearInterval(timer);
   }, []);
   
-  // Hora de Colombia (UTC-5)
   const currentHour = currentTime.getHours();
   const currentMinute = currentTime.getMinutes();
   const isNight = currentHour >= 18 || currentHour <= 6;
 
-  // 🎯 Función para obtener color según riesgo - CORREGIDA
-  const getRiskColor = (riskScore: number) => {
-    // 🚀 APLICAR FACTOR NOCTURNO AQUÍ UNA SOLA VEZ
-    let adjustedScore = riskScore;
-    if (isNight) {
-      adjustedScore = Math.min(riskScore + 0.2, 1.0); // +20% nocturno, máximo 100%
+  // 🌐 FUNCIÓN PARA CARGAR DATOS COMPARTIDOS
+  const loadSharedData = () => {
+    console.log(`🗺️ === LOADING SHARED DATA ===`);
+    console.log(`🌐 Shared data available: ${globalMLData.length} localidades`);
+    console.log(`🌐 Data source: ${globalDataSource}`);
+    console.log(`🌐 Load time: ${globalLoadTime}`);
+    
+    if (globalMLData && globalMLData.length > 0) {
+      setLocalidadesML(globalMLData);
+      setDataSource(globalDataSource);
+      console.log(`✅ MapScreen: Using shared data (${globalMLData.length} localidades)`);
+      
+      // Log sample data para debug
+      console.log("🔍 Sample shared data:");
+      globalMLData.slice(0, 3).forEach((loc: any) => {
+        console.log(`  ${loc.localidad}: ${(loc.risk_score * 100).toFixed(0)}%`);
+      });
+    } else {
+      console.log("⚠️ No shared data available, waiting...");
+      setLocalidadesML([]);
+      setDataSource("WAITING");
     }
+  };
+
+  // 🔄 CARGAR DATOS COMPARTIDOS AL INICIAR Y CADA 10 SEGUNDOS
+  useEffect(() => {
+    loadSharedData();
     
-    console.log(`🎨 Color for ${riskScore.toFixed(3)} -> ${adjustedScore.toFixed(3)} (night: ${isNight})`);
+    // Check for shared data every 10 seconds
+    const interval = setInterval(loadSharedData, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // 🎯 Función para obtener color según riesgo - USAR DATOS ML DIRECTOS
+  const getRiskColor = (riskScore: number) => {
+    console.log(`🎨 Color for shared ML score: ${riskScore.toFixed(3)}`);
     
-    if (adjustedScore < 0.3) return COLORS.safe;
-    if (adjustedScore < 0.6) return COLORS.warning;
+    if (riskScore < 0.3) return COLORS.safe;
+    if (riskScore < 0.6) return COLORS.warning;
     return COLORS.danger;
   };
 
-  // 🎯 Función para obtener texto de riesgo - CORREGIDA
+  // 🎯 Función para obtener texto de riesgo
   const getRiskText = (riskScore: number) => {
-    // 🚀 APLICAR FACTOR NOCTURNO AQUÍ UNA SOLA VEZ
-    let adjustedScore = riskScore;
-    if (isNight) {
-      adjustedScore = Math.min(riskScore + 0.2, 1.0);
-    }
+    console.log(`📝 Text for shared ML score: ${riskScore.toFixed(3)}`);
     
-    console.log(`📝 Text for ${riskScore.toFixed(3)} -> ${adjustedScore.toFixed(3)} (night: ${isNight})`);
-    
-    if (adjustedScore < 0.3) return 'SEGURO';
-    if (adjustedScore < 0.6) return 'PRECAUCIÓN';
+    if (riskScore < 0.3) return 'SEGURO';
+    if (riskScore < 0.6) return 'PRECAUCIÓN';
     return 'ALTO RIESGO';
   };
 
-  // 🎯 Función para obtener score ajustado (para mostrar en UI)
-  const getAdjustedScore = (riskScore: number) => {
-    let adjustedScore = riskScore;
-    if (isNight) {
-      adjustedScore = Math.min(riskScore + 0.2, 1.0);
-    }
-    return adjustedScore;
-  };
-
-  // 🎯 Manejo de selección de zona - CORREGIDO
-  const handleZonePress = (localidad) => {
+  // 🎯 Manejo de selección de zona
+  const handleZonePress = (localidad: any) => {
     setSelectedZone(localidad);
     
-    // 🚀 CALCULAR UNA SOLA VEZ EL SCORE AJUSTADO
-    const adjustedScore = getAdjustedScore(localidad.riskScore);
-    const riskText = getRiskText(localidad.riskScore);
-    const displayScore = Math.min(adjustedScore * 100, 100).toFixed(0);
+    const displayScore = Math.min(localidad.risk_score * 100, 100).toFixed(0);
+    const riskText = getRiskText(localidad.risk_score);
 
-    console.log(`🔍 Zone pressed: ${localidad.name}`);
-    console.log(`  Base risk: ${localidad.riskScore.toFixed(3)}`);
-    console.log(`  Adjusted: ${adjustedScore.toFixed(3)}`);
+    console.log(`🔍 Zone pressed: ${localidad.localidad}`);
+    console.log(`  Shared ML Risk Score: ${localidad.risk_score.toFixed(3)}`);
     console.log(`  Display: ${displayScore}%`);
     console.log(`  Level: ${riskText}`);
-    console.log(`  Night: ${isNight}`);
+    console.log(`  Source: ${dataSource}`);
 
     Alert.alert(
-      `📍 ${localidad.name}`,
-      `🛡️ Nivel: ${riskText}\n📊 Score: ${displayScore}%\n🕐 Hora: ${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}\n${isNight ? '🌙 Factor nocturno aplicado (+20%)\n' : '☀️ Horario diurno\n'}📝 ${localidad.description}`,
+      `📍 ${localidad.localidad}`,
+      `🛡️ Nivel: ${riskText}\n📊 Score: ${displayScore}%\n🕐 Hora: ${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}\n🌐 Fuente: ${dataSource} (Compartido)\n${isNight ? '🌙 Horario nocturno\n' : '☀️ Horario diurno\n'}📝 Datos ML sincronizados`,
       [
         { text: 'Cerrar', style: 'cancel' },
         { 
@@ -328,7 +178,7 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 🗺️ Mapa principal CON MÁS DETALLE */}
+      {/* 🗺️ Mapa principal CON DATOS COMPARTIDOS */}
       <MapView
         style={styles.map}
         provider={PROVIDER_GOOGLE}
@@ -336,34 +186,32 @@ export default function MapScreen() {
         initialRegion={{
           latitude: 4.6097,
           longitude: -74.0817,
-          latitudeDelta: 0.25, // Más zoom para ver calles
-          longitudeDelta: 0.25, // Más zoom para ver calles
+          latitudeDelta: 0.25,
+          longitudeDelta: 0.25,
         }}
         showsUserLocation={true}
         showsMyLocationButton={false}
         showsTraffic={false}
-        showsBuildings={true} // Mostrar edificios
-        showsPointsOfInterest={true} // Mostrar puntos de interés
+        showsBuildings={true}
+        showsPointsOfInterest={true}
         showsCompass={true}
         showsScale={true}
         loadingEnabled={true}
       >
-        {/* 📍 TODAS LAS 20 LOCALIDADES con círculos de riesgo */}
-        {BOGOTA_LOCALIDADES.map((localidad) => {
-          // 🚀 CALCULAR COLOR Y SCORE AJUSTADO UNA SOLA VEZ
-          const adjustedScore = getAdjustedScore(localidad.riskScore);
-          const circleColor = getRiskColor(localidad.riskScore);
+        {/* 📍 MARCADORES CON DATOS COMPARTIDOS */}
+        {localidadesML.map((localidad, index) => {
+          const circleColor = getRiskColor(localidad.risk_score);
           
           return (
-            <React.Fragment key={localidad.id}>
+            <React.Fragment key={`${localidad.localidad}-${index}`}>
               {/* Círculo de riesgo */}
               <Circle
                 center={{
-                  latitude: localidad.latitude,
-                  longitude: localidad.longitude,
+                  latitude: localidad.lat,
+                  longitude: localidad.lng,
                 }}
-                radius={1500} // 1.5km radius
-                fillColor={`${circleColor}20`} // Transparente
+                radius={1500}
+                fillColor={`${circleColor}20`}
                 strokeColor={circleColor}
                 strokeWidth={2}
               />
@@ -371,19 +219,19 @@ export default function MapScreen() {
               {/* Marcador principal */}
               <Marker
                 coordinate={{
-                  latitude: localidad.latitude,
-                  longitude: localidad.longitude,
+                  latitude: localidad.lat,
+                  longitude: localidad.lng,
                 }}
                 onPress={() => handleZonePress(localidad)}
-                title={localidad.name}
-                description={`${getRiskText(localidad.riskScore)} (${(adjustedScore * 100).toFixed(0)}%)`}
+                title={localidad.localidad}
+                description={`${getRiskText(localidad.risk_score)} (${(localidad.risk_score * 100).toFixed(0)}%)`}
               />
             </React.Fragment>
           );
         })}
       </MapView>
 
-      {/* 🎨 Header con gradiente */}
+      {/* 🎨 Header con gradiente - ACTUALIZADO */}
       <LinearGradient
         colors={[COLORS.primaryGradient[0], 'transparent']}
         style={styles.header}
@@ -396,17 +244,20 @@ export default function MapScreen() {
         </TouchableOpacity>
         
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>🗺️ Mapa de Riesgo</Text>
+          <Text style={styles.headerTitle}>🗺️ Mapa ML Compartido</Text>
           <Text style={styles.headerSubtitle}>
             Colombia: {currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')} {isNight ? '🌙' : '☀️'}
-            {isNight ? ' - Factor Nocturno Activo' : ' - Horario Diurno'}
+            {isNight ? ' - Horario Nocturno' : ' - Horario Diurno'}
+          </Text>
+          <Text style={styles.dataSourceBadge}>
+            🌐 Sincronizado: {dataSource} {dataSource === 'API' ? '✅' : dataSource === 'FALLBACK' ? '🔧' : '⏳'}
           </Text>
         </View>
       </LinearGradient>
 
-      {/* 📊 Panel de leyenda MEJORADO CON CONSISTENCIA */}
+      {/* 📊 Panel de leyenda - ACTUALIZADO */}
       <View style={styles.legendPanel}>
-        <Text style={styles.legendTitle}>🛡️ Niveles de Riesgo</Text>
+        <Text style={styles.legendTitle}>🛡️ Datos Compartidos</Text>
         
         <View style={styles.legendItem}>
           <View style={[styles.legendColor, { backgroundColor: COLORS.safe }]} />
@@ -424,38 +275,54 @@ export default function MapScreen() {
         </View>
         
         <Text style={styles.legendFooter}>
-          {isNight ? '🌙 +20% riesgo nocturno aplicado' : '☀️ Valores base diurnos'}
+          🌐 Mismos datos que Dashboard • {globalLoadTime}
         </Text>
       </View>
 
-      {/* 🚀 Botón de acción flotante CON DEBUG */}
+      {/* 🚀 Botón de acción flotante - ACTUALIZADO */}
       <TouchableOpacity 
         style={styles.fabButton}
         onPress={() => {
-          // 🔍 DEBUG INFO
-          const engativa = BOGOTA_LOCALIDADES.find(l => l.name === 'ENGATIVÁ');
-          if (engativa) {
-            const adjustedScore = getAdjustedScore(engativa.riskScore);
-            Alert.alert(
-              '🔍 Debug ENGATIVÁ',
-              `Base: ${(engativa.riskScore * 100).toFixed(0)}%\nAjustado: ${(adjustedScore * 100).toFixed(0)}%\nNoche: ${isNight}\nNivel: ${getRiskText(engativa.riskScore)}\nColor: ${getRiskColor(engativa.riskScore) === COLORS.safe ? '🟢' : getRiskColor(engativa.riskScore) === COLORS.warning ? '🟡' : '🔴'}`
-            );
-          }
+          Alert.alert(
+            '🔍 Debug Datos Compartidos',
+            `Localidades cargadas: ${localidadesML.length}\nFuente: ${dataSource}\nÚltima carga: ${globalLoadTime}\nHora actual: ${currentHour}:${currentMinute.toString().padStart(2, '0')}\nSincronizado con Dashboard: ${localidadesML.length > 0 ? '✅' : '❌'}`
+          );
         }}
       >
         <LinearGradient
           colors={[COLORS.accent, '#9575CD']}
           style={styles.fabGradient}
         >
-          <Text style={styles.fabText}>🔍</Text>
+          <Text style={styles.fabText}>🌐</Text>
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* 📍 Contador de localidades */}
+      {/* 📍 Contador de localidades - ACTUALIZADO */}
       <View style={styles.counterBadge}>
-        <Text style={styles.counterText}>20 Localidades</Text>
-        <Text style={styles.counterSubtext}>{isNight ? '🌙 Nocturno' : '☀️ Diurno'}</Text>
+        <Text style={styles.counterText}>{localidadesML.length} Sincronizadas</Text>
+        <Text style={styles.counterSubtext}>
+          {dataSource === 'API' ? '🤖 ML' : dataSource === 'FALLBACK' ? '🔧 Local' : '⏳ Esperando'}
+        </Text>
       </View>
+
+      {/* 🚨 MENSAJE SI NO HAY DATOS */}
+      {localidadesML.length === 0 && (
+        <View style={styles.noDataOverlay}>
+          <View style={styles.noDataCard}>
+            <Text style={styles.noDataIcon}>⏳</Text>
+            <Text style={styles.noDataTitle}>Esperando datos compartidos</Text>
+            <Text style={styles.noDataText}>
+              El mapa se sincronizará automáticamente con los datos del Dashboard.
+            </Text>
+            <TouchableOpacity 
+              style={styles.refreshButton}
+              onPress={loadSharedData}
+            >
+              <Text style={styles.refreshText}>🔄 Verificar ahora</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -511,9 +378,16 @@ const styles = StyleSheet.create({
     color: COLORS.primaryText,
     opacity: 0.8,
     textAlign: 'center',
+    marginBottom: 4,
+  },
+  dataSourceBadge: {
+    fontSize: 12,
+    color: COLORS.primaryText,
+    opacity: 0.7,
+    fontStyle: 'italic',
   },
 
-  // 📊 Leyenda MEJORADA
+  // 📊 Leyenda
   legendPanel: {
     position: 'absolute',
     bottom: 20,
@@ -584,7 +458,7 @@ const styles = StyleSheet.create({
   // 📍 Counter Badge ACTUALIZADO
   counterBadge: {
     position: 'absolute',
-    top: 120,
+    top: 140,
     right: 20,
     backgroundColor: COLORS.accent,
     paddingHorizontal: 12,
@@ -606,5 +480,58 @@ const styles = StyleSheet.create({
     color: COLORS.lightText,
     fontSize: 10,
     opacity: 0.8,
+  },
+
+  // 🚨 No Data Overlay
+  noDataOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noDataCard: {
+    backgroundColor: COLORS.cardBg,
+    padding: 30,
+    borderRadius: 16,
+    margin: 20,
+    alignItems: 'center',
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  noDataIcon: {
+    fontSize: 48,
+    marginBottom: 15,
+  },
+  noDataTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.primaryText,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  noDataText: {
+    fontSize: 14,
+    color: COLORS.secondaryText,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  refreshButton: {
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 25,
+  },
+  refreshText: {
+    color: COLORS.lightText,
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });

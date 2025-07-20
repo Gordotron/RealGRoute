@@ -460,13 +460,13 @@ class RiskPredictor:
         
         # Factor hora
         if 22 <= hora or hora <= 5:
-            risk += 0.4
+            risk += 0.15
         elif 18 <= hora <= 21:
-            risk += 0.2
+            risk += 0.1
         
         # Factor día
         if dia_semana in [5, 6]:
-            risk += 0.2
+            risk += 0.05
         
         return min(risk, 1.0)
 

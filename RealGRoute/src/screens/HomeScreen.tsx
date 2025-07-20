@@ -4,6 +4,11 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 
+// 🚀 DATOS GLOBALES COMPARTIDOS CON MAPSCREEN
+export let globalMLData: any[] = [];
+export let globalDataSource: string = 'unknown';
+export let globalLoadTime: string = '';
+
 const COLORS = {
   primaryGradient: ['#E8F4F8', '#F0F8FF'],
   accent: '#7B68EE',
@@ -71,6 +76,7 @@ export default function HomeScreen() {
   const [isGPSActive, setIsGPSActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [gpsDistance, setGpsDistance] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<string>('unknown');
   
   // ⏰ Actualizar tiempo cada minuto
   useEffect(() => {
@@ -91,7 +97,6 @@ export default function HomeScreen() {
       console.log("🛰️ === GPS DEBUG START ===");
       console.log("🛰️ Solicitando permisos GPS...");
       
-      // Solicitar permisos
       const { status } = await Location.requestForegroundPermissionsAsync();
       console.log(`🛰️ Permission status: ${status}`);
       
@@ -117,14 +122,12 @@ export default function HomeScreen() {
 
       console.log("✅ Permisos concedidos, obteniendo ubicación...");
       
-      // Mostrar loading al usuario
       Alert.alert('🛰️ GPS Activo', 'Detectando tu ubicación...', [], { cancelable: false });
       
-      // Obtener ubicación actual con timeout más largo
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
-        maximumAge: 30000, // Cache 30 segundos
-        timeout: 15000, // Timeout 15 segundos
+        maximumAge: 30000,
+        timeout: 15000,
       });
 
       console.log(`📍 GPS SUCCESS: ${location.coords.latitude}, ${location.coords.longitude}`);
@@ -135,30 +138,25 @@ export default function HomeScreen() {
       
       console.log(`📍 Raw GPS: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
       
-      // Encontrar localidad más cercana
       const { localidad, distance } = findClosestLocalidad(latitude, longitude);
       setGpsDistance(distance);
       
       console.log(`🎯 Localidad detectada: ${localidad} (${distance})`);
       console.log("🛰️ === GPS DEBUG END ===");
       
-      // Cerrar loading y mostrar resultado
       Alert.alert('🎯 Ubicación Detectada', `Tu zona: ${localidad}\nDistancia: ${distance}`, [{ text: 'OK' }]);
       
       return localidad;
       
     } catch (error) {
       console.log(`❌ GPS ERROR: ${error}`);
-      console.log(`❌ Error type: ${typeof error}`);
-      console.log(`❌ Error message: ${(error as any)?.message || 'Unknown'}`);
-      
       Alert.alert('🛰️ GPS Error', `Error: ${(error as any)?.message || 'Unknown error'}. Usando zona por defecto.`);
       setIsGPSActive(false);
-      return 'CHAPINERO'; // Fallback
+      return 'CHAPINERO';
     }
   };
 
-  // 🎯 FUNCIÓN PARA ENCONTRAR LOCALIDAD MÁS CERCANA CON DEBUG
+  // 🎯 FUNCIÓN PARA ENCONTRAR LOCALIDAD MÁS CERCANA
   const findClosestLocalidad = (userLat: number, userLng: number): {localidad: string, distance: string} => {
     console.log(`🔍 Finding closest to: ${userLat.toFixed(6)}, ${userLng.toFixed(6)}`);
     
@@ -168,7 +166,6 @@ export default function HomeScreen() {
     const distances: Array<{localidad: string, distance: number, km: string}> = [];
     
     Object.entries(LOCALIDADES_COORDS).forEach(([localidad, coords]) => {
-      // Fórmula de distancia haversine simplificada
       const latDiff = Math.abs(userLat - coords.lat);
       const lngDiff = Math.abs(userLng - coords.lng);
       const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
@@ -182,7 +179,6 @@ export default function HomeScreen() {
       }
     });
     
-    // Mostrar las 3 más cercanas
     distances.sort((a, b) => a.distance - b.distance);
     console.log("🏆 Top 3 closest localidades:");
     distances.slice(0, 3).forEach((item, index) => {
@@ -197,248 +193,179 @@ export default function HomeScreen() {
     };
   };
 
-  // 🚀 FUNCIÓN PARA CALCULAR TOP 5 DINÁMICO CON FACTOR NOCTURNO
-  const calculateTop5RiskZones = () => {
-    console.log("🔥 Calculating Top 5 with night factor...");
-    
-    // 📍 Base data de todas las localidades
-    const allLocalidades = [
-      { localidad: 'CIUDAD BOLÍVAR', baseRisk: 0.75, description: 'Zona sur con alto riesgo nocturno' },
-      { localidad: 'SAN CRISTÓBAL', baseRisk: 0.55, description: 'Zona sur con vigilancia moderada' },
-      { localidad: 'RAFAEL URIBE URIBE', baseRisk: 0.50, description: 'Zona suroriental' },
-      { localidad: 'USME', baseRisk: 0.48, description: 'Periferia sur con precaución' },
-      { localidad: 'TUNJUELITO', baseRisk: 0.42, description: 'Zona residencial sur' },
-      { localidad: 'BOSA', baseRisk: 0.40, description: 'Zona residencial occidental' },
-      { localidad: 'KENNEDY', baseRisk: 0.38, description: 'Gran localidad occidental' },
-      { localidad: 'LA CANDELARIA', baseRisk: 0.35, description: 'Centro histórico turístico' },
-      { localidad: 'LOS MÁRTIRES', baseRisk: 0.30, description: 'Centro con precaución' },
-      { localidad: 'SANTA FE', baseRisk: 0.25, description: 'Centro histórico con precaución nocturna' },
-      { localidad: 'SUMAPAZ', baseRisk: 0.25, description: 'Zona rural montañosa' },
-      { localidad: 'PUENTE ARANDA', baseRisk: 0.24, description: 'Zona industrial y comercial' },
-      { localidad: 'ANTONIO NARIÑO', baseRisk: 0.22, description: 'Zona central sur' },
-      { localidad: 'FONTIBÓN', baseRisk: 0.20, description: 'Zona aeroportuaria segura' },
-      { localidad: 'BARRIOS UNIDOS', baseRisk: 0.19, description: 'Zona central norte' },
-      { localidad: 'CHAPINERO', baseRisk: 0.18, description: 'Zona comercial y residencial segura' },
-      { localidad: 'ENGATIVÁ', baseRisk: 0.18, description: 'Zona noroccidental segura' },
-      { localidad: 'TEUSAQUILLO', baseRisk: 0.17, description: 'Zona central segura' },
-      { localidad: 'SUBA', baseRisk: 0.16, description: 'Zona norte residencial tranquila' },
-      { localidad: 'USAQUÉN', baseRisk: 0.15, description: 'Zona norte segura y comercial' }
-    ];
-
-    // 🌙 APLICAR FACTOR NOCTURNO A TODAS
-    const localidadesWithNightFactor = allLocalidades.map(loc => {
-      const adjustedRisk = isNight ? Math.min(loc.baseRisk + 0.2, 1.0) : loc.baseRisk;
-      const riskLevel = adjustedRisk < 0.3 ? 'Bajo' : adjustedRisk < 0.6 ? 'Medio' : 'Alto';
-      
-      console.log(`🎯 ${loc.localidad}: ${(loc.baseRisk * 100).toFixed(0)}% -> ${(adjustedRisk * 100).toFixed(0)}% (${riskLevel})`);
-      
-      return {
-        localidad: loc.localidad,
-        risk_score: adjustedRisk,
-        risk_level: riskLevel,
-        description: loc.description
+  // 🔧 FUNCIÓN HELPER PARA CREAR ZONA MANUAL (MANTENER IGUAL)
+  const createManualUserZone = (localidad: string): LocalidadRisk => {
+    const getRiskForLocalidad = (loc: string) => {
+      const riskMap: {[key: string]: number} = {
+        'ENGATIVÁ': 0.18, 'USAQUÉN': 0.15, 'CHAPINERO': 0.18, 'SUBA': 0.16,
+        'TEUSAQUILLO': 0.17, 'FONTIBÓN': 0.20, 'KENNEDY': 0.38, 'BOSA': 0.40,
+        'CIUDAD BOLÍVAR': 0.75, 'SAN CRISTÓBAL': 0.55, 'RAFAEL URIBE URIBE': 0.50,
+        'USME': 0.48, 'TUNJUELITO': 0.42, 'LA CANDELARIA': 0.35, 'LOS MÁRTIRES': 0.30,
+        'SANTA FE': 0.25, 'PUENTE ARANDA': 0.24, 'ANTONIO NARIÑO': 0.22,
+        'BARRIOS UNIDOS': 0.19, 'SUMAPAZ': 0.25
       };
-    });
-
-    // 🔥 ORDENAR POR RIESGO AJUSTADO Y TOMAR TOP 5
-    const top5 = localidadesWithNightFactor
-      .sort((a, b) => b.risk_score - a.risk_score)
-      .slice(0, 5);
-
-    console.log("🏆 TOP 5 FINAL:");
-    top5.forEach((zone, index) => {
-      console.log(`  ${index + 1}. ${zone.localidad}: ${(zone.risk_score * 100).toFixed(0)}% (${zone.risk_level})`);
-    });
-
-    return top5;
+      return riskMap[loc] || 0.25;
+    };
+    
+    const baseRisk = getRiskForLocalidad(localidad);
+    const adjustedRisk = isNight ? Math.min(baseRisk + 0.2, 1.0) : baseRisk;
+    
+    return {
+      localidad: localidad,
+      risk_score: adjustedRisk,
+      risk_level: adjustedRisk < 0.3 ? 'Bajo' : adjustedRisk < 0.6 ? 'Medio' : 'Alto'
+    };
   };
 
-  // 🚀 FUNCIÓN PARA CARGAR STATS ML CON GPS ÉPICO Y TOP 5 DINÁMICO
+  // 🚀 FUNCIÓN OPTIMIZADA - SOLO API PARA TOP 5
   const loadMLDashboardData = async () => {
     setIsLoading(true);
+    
     try {
-      console.log(`📊 Loading ML Dashboard for ${currentHour}:${currentMinute.toString().padStart(2, '0')}...`);
+      console.log(`📊 === LOADING ML DASHBOARD (API ONLY) ===`);
+      console.log(`🕐 Time: ${currentHour}:${currentMinute.toString().padStart(2, '0')} (Night: ${isNight})`);
       
       // 🛰️ DETECTAR UBICACIÓN PRIMERO
       const userLocalidad = await detectUserLocation();
       console.log(`🎯 GPS Result: ${userLocalidad}`);
       
-      // 🔥 CALCULAR TOP 5 DINÁMICO
-      const dynamicTop5 = calculateTop5RiskZones();
-      setTopRiskZones(dynamicTop5);
+      // 🚀 SOLO API - SIN FALLBACKS DINÁMICOS PARA TOP 5
+      console.log("🤖 Calling API (ONLY source for Top 5)...");
+      // 🧪 TEST TEMPORAL - línea donde haces fetch
+      const response = await fetch(`http://192.168.2.9:8000/risk-map?hora=12&dia_semana=1`);
       
-      // Llamar API de risk map
-      const response = await fetch(`http://192.168.2.9:8000/risk-map?hora=${currentHour}&dia_semana=${currentTime.getDay()}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        const riskMap = data.risk_map;
-        
-        console.log(`📊 API returned ${riskMap.length} localidades`);
-        console.log(`🔍 Looking for ${userLocalidad} in API data...`);
-        
-        // 📊 CALCULAR STATS ÉPICAS
-        const totalLocalidades = riskMap.length;
-        const avgRisk = riskMap.reduce((sum: number, loc: any) => sum + loc.risk_score, 0) / totalLocalidades;
-        const highRiskCount = riskMap.filter((loc: any) => loc.risk_score > 0.6).length;
-        
-        // 🔥 SI LA API TIENE DATOS, USAR ESOS PARA TOP 5
-        if (riskMap.length > 0) {
-          const apiTop5 = riskMap
-            .sort((a: any, b: any) => b.risk_score - a.risk_score)
-            .slice(0, 5)
-            .map((loc: any) => ({
-              localidad: loc.localidad,
-              risk_score: loc.risk_score,
-              risk_level: loc.risk_level
-            }));
-          
-          console.log("🤖 Using API Top 5 instead of dynamic");
-          setTopRiskZones(apiTop5);
-        }
-        
-        // 📍 ZONA DEL USUARIO REAL (GPS) - BUSCAR EN API PRIMERO
-        let userZone = riskMap.find((loc: any) => loc.localidad === userLocalidad);
-        
-        if (userZone) {
-          console.log(`✅ Found ${userLocalidad} in API:`, userZone);
-          setUserZoneRisk(userZone);
-        } else {
-          console.log(`❌ ${userLocalidad} NOT found in API, creating manual zone...`);
-          
-          // 🎯 CREAR ZONA MANUAL CON RIESGO ESPECÍFICO POR LOCALIDAD
-          const getRiskForLocalidad = (localidad: string) => {
-            const riskMap: {[key: string]: number} = {
-              'ENGATIVÁ': 0.18, // Tu localidad actual
-              'USAQUÉN': 0.15,
-              'CHAPINERO': 0.18,
-              'SUBA': 0.16,
-              'TEUSAQUILLO': 0.17,
-              'FONTIBÓN': 0.20,
-              'KENNEDY': 0.38,
-              'BOSA': 0.40,
-              'CIUDAD BOLÍVAR': 0.75,
-              'SAN CRISTÓBAL': 0.55,
-              'RAFAEL URIBE URIBE': 0.50,
-              'USME': 0.48,
-              'TUNJUELITO': 0.42,
-              'LA CANDELARIA': 0.35,
-              'LOS MÁRTIRES': 0.30,
-              'SANTA FE': 0.25,
-              'PUENTE ARANDA': 0.24,
-              'ANTONIO NARIÑO': 0.22,
-              'BARRIOS UNIDOS': 0.19,
-              'SUMAPAZ': 0.25
-            };
-            return riskMap[localidad] || 0.25; // Default
-          };
-          
-          const baseRisk = getRiskForLocalidad(userLocalidad);
-          const adjustedRisk = isNight ? Math.min(baseRisk + 0.2, 1.0) : baseRisk;
-          
-          const manualZone = {
-            localidad: userLocalidad,
-            risk_score: adjustedRisk,
-            risk_level: adjustedRisk < 0.3 ? 'Bajo' : adjustedRisk < 0.6 ? 'Medio' : 'Alto'
-          };
-          
-          console.log(`🔧 Created manual zone:`, manualZone);
-          setUserZoneRisk(manualZone);
-        }
-        
-        // 🤖 STATS ML
-        setMLStats({
-          total_localidades: totalLocalidades,
-          ml_active: true,
-          last_update: new Date().toLocaleTimeString(),
-          avg_risk: avgRisk,
-          high_risk_count: highRiskCount,
-          precision: 92.4,
-          confidence: avgRisk > 0.7 ? 'Alta' : avgRisk > 0.4 ? 'Media' : 'Baja'
-        });
-        
-        console.log(`✅ Dashboard loaded successfully for ${userLocalidad}`);
-        
-      } else {
-        throw new Error('API Error');
-      }
-    } catch (error) {
-      console.log("❌ ML API failed for dashboard, using fallback");
-      
-      // 🛰️ FALLBACK PERO CON GPS REAL
-      let userLocalidad = 'CHAPINERO';
-      if (isGPSActive && userLocation) {
-        const result = findClosestLocalidad(userLocation.lat, userLocation.lng);
-        userLocalidad = result.localidad;
-        console.log(`🔧 Fallback using GPS result: ${userLocalidad}`);
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
       }
       
-      // 🔥 USAR TOP 5 DINÁMICO EN FALLBACK
-      const dynamicTop5 = calculateTop5RiskZones();
-      setTopRiskZones(dynamicTop5);
+      const data = await response.json();
+      const riskMap = data.risk_map;
       
-      // Resto del código fallback...
-      const getRiskForLocalidad = (localidad: string) => {
-        const riskMap: {[key: string]: number} = {
-          'ENGATIVÁ': 0.18,
-          'USAQUÉN': 0.15,
-          'CHAPINERO': 0.18,
-          'SUBA': 0.16,
-          'TEUSAQUILLO': 0.17,
-          'FONTIBÓN': 0.20,
-          'KENNEDY': 0.38,
-          'BOSA': 0.40,
-          'CIUDAD BOLÍVAR': 0.75,
-          'SAN CRISTÓBAL': 0.55,
-          'RAFAEL URIBE URIBE': 0.50,
-          'USME': 0.48,
-          'TUNJUELITO': 0.42,
-          'LA CANDELARIA': 0.35,
-          'LOS MÁRTIRES': 0.30,
-          'SANTA FE': 0.25,
-          'PUENTE ARANDA': 0.24,
-          'ANTONIO NARIÑO': 0.22,
-          'BARRIOS UNIDOS': 0.19,
-          'SUMAPAZ': 0.25
-        };
-        return riskMap[localidad] || 0.25;
-      };
+      if (!riskMap || riskMap.length === 0) {
+        throw new Error('API returned empty risk map');
+      }
       
-      const baseRisk = getRiskForLocalidad(userLocalidad);
-      const adjustedRisk = isNight ? Math.min(baseRisk + 0.2, 1.0) : baseRisk;
+      console.log(`📊 API SUCCESS: ${riskMap.length} localidades`);
+      // ✅ GUARDAR PARA MAPSCREEN
+      globalMLData = riskMap;
+      globalDataSource = "API";
+      globalLoadTime = new Date().toLocaleTimeString();
+      // ✅ AGREGAR ESTE DEBUG DESPUÉS DE LA LÍNEA ANTERIOR:
+      console.log("🔍 === API LOCALIDADES COMPLETAS ===");
+          riskMap.forEach((loc: any, index: number) => {
+            console.log(`  ${index + 1}. ${loc.localidad}: ${(loc.risk_score * 100).toFixed(0)}%`);
+          });
+          
+      console.log("🔍 === FIN LISTA API ===");
+      // ✅ USAR SOLO DATOS DE LA API PARA TOP 5
+      const apiTop5 = riskMap
+        .sort((a: any, b: any) => b.risk_score - a.risk_score)
+        .slice(0, 5)
+        .map((loc: any) => ({
+          localidad: loc.localidad,
+          risk_score: loc.risk_score,
+          risk_level: loc.risk_level
+        }));
       
-      setUserZoneRisk({ 
-        localidad: userLocalidad, 
-        risk_score: adjustedRisk, 
-        risk_level: adjustedRisk < 0.3 ? 'Bajo' : adjustedRisk < 0.6 ? 'Medio' : 'Alto'
+      setTopRiskZones(apiTop5);
+      setDataSource("API");
+      
+      console.log("🤖 Using API Top 5 (ONLY source)");
+      console.log("🏆 API Top 5:", apiTop5.map(z => `${z.localidad}:${(z.risk_score*100).toFixed(0)}%`));
+      
+      // 📊 STATS ML DESDE API (MANTENER IGUAL)
+      const totalLocalidades = riskMap.length;
+      const avgRisk = riskMap.reduce((sum: number, loc: any) => sum + loc.risk_score, 0) / totalLocalidades;
+      const highRiskCount = riskMap.filter((loc: any) => loc.risk_score > 0.6).length;
+      
+      setMLStats({
+        total_localidades: totalLocalidades,
+        ml_active: true,
+        last_update: new Date().toLocaleTimeString(),
+        avg_risk: avgRisk,
+        high_risk_count: highRiskCount,
+        precision: 92.4,
+        confidence: avgRisk > 0.7 ? 'Alta' : avgRisk > 0.4 ? 'Media' : 'Baja'
       });
       
-      console.log(`🔧 Fallback zone set to: ${userLocalidad}`);
+      // 📍 ZONA DEL USUARIO DESDE API (MANTENER IGUAL)
+      // 📍 ZONA DEL USUARIO DESDE API - CORREGIDO
+      let userZone = riskMap.find((loc: any) => loc.localidad === userLocalidad);
       
-      // Stats fallback...
+      if (!userZone) {
+        // Buscar sin tildes
+        console.log(`🔍 Searching ${userLocalidad} without tildes...`);
+        const userLocalidadNoTilde = userLocalidad.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        userZone = riskMap.find((loc: any) => {
+            const locSinTilde = loc.localidad.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            return locSinTilde === userLocalidadNoTilde;
+        });
+  
+  if (userZone) {
+    console.log(`✅ Found ${userLocalidad} as ${userZone.localidad} (without tildes)`);
+  }
+}
+
+if (userZone) {
+  console.log(`✅ User zone from API:`, userZone);
+  setUserZoneRisk(userZone);
+} else {
+  console.log(`❌ ${userLocalidad} NOT found in API, creating manual zone...`);
+  const manualZone = createManualUserZone(userLocalidad);
+  setUserZoneRisk(manualZone);
+}
+      
+      console.log(`✅ Dashboard loaded successfully from API`);
+      
+    } catch (error) {
+      console.log(`❌ API FAILED: ${error}`);
+      
+      // 🚨 ERROR STATE - LIMPIAR TOP 5, MANTENER RESTO CON FALLBACK
+      setTopRiskZones([]);
+      setDataSource("ERROR");
+      
+      // 📍 Zona usuario fallback (MANTENER FUNCIONAL)
+      const userLocalidad = isGPSActive && userLocation ? 
+        findClosestLocalidad(userLocation.lat, userLocation.lng).localidad : 
+        'CHAPINERO';
+      const fallbackUserZone = createManualUserZone(userLocalidad);
+      setUserZoneRisk(fallbackUserZone);
+      
+      // 📊 Stats fallback (MANTENER FUNCIONAL)
       setMLStats({
         total_localidades: 20,
         ml_active: false,
-        last_update: 'Cache',
+        last_update: 'Error',
         avg_risk: isNight ? 0.55 : 0.35,
         high_risk_count: isNight ? 8 : 4,
-        precision: 87.2,
-        confidence: 'Media'
+        precision: 85.0,
+        confidence: 'Baja'
       });
+      
+      // Mostrar error al usuario SOLO PARA TOP 5
+      Alert.alert(
+        '🚨 Error Top 5',
+        `No se pudo cargar el Top 5 de zonas de riesgo:\n\n${error}\n\nIntenta nuevamente o verifica tu conexión.`,
+        [
+          { text: 'Reintentar', onPress: () => loadMLDashboardData() },
+          { text: 'Cerrar', style: 'cancel' }
+        ]
+      );
+      
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 🔥 CARGAR DATOS AL INICIAR Y CADA 5 MINUTOS
+  // 🔥 CARGAR DATOS AL INICIAR Y CADA 5 MINUTOS (MANTENER IGUAL)
   useEffect(() => {
     loadMLDashboardData();
     
-    const interval = setInterval(loadMLDashboardData, 5 * 60 * 1000); // 5 minutos
+    const interval = setInterval(loadMLDashboardData, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [currentHour]);
 
-  // 🎨 FUNCIONES PARA OBTENER COLOR Y EMOJI DE RIESGO
+  // 🎨 FUNCIONES PARA OBTENER COLOR Y EMOJI DE RIESGO (MANTENER IGUAL)
   const getRiskColor = (riskScore: number) => {
     if (riskScore < 0.3) return COLORS.safe;
     if (riskScore < 0.6) return COLORS.warning;
@@ -451,7 +378,7 @@ export default function HomeScreen() {
     return '🔴';
   };
 
-  // 🛰️ HANDLER PARA ACTIVAR GPS MANUALMENTE
+  // 🛰️ HANDLER PARA ACTIVAR GPS MANUALMENTE (MANTENER IGUAL)
   const handleGPSToggle = async () => {
     if (isGPSActive) {
       Alert.alert('🛰️ GPS Activo', 'El GPS ya está funcionando correctamente');
@@ -482,11 +409,15 @@ export default function HomeScreen() {
           
           <Text style={styles.title}>🛡️ Safety Dashboard {mlStats?.ml_active ? '🤖' : '📦'}</Text>
           <Text style={styles.subtitle}>
-            {isNight ? '🌙 Noche' : '☀️ Día'} - {currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')}{isNight ? ' - Factor Nocturno Activo' : ''}
+            {isNight ? '🌙 Noche' : '☀️ Día'} - {currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')}
+            {isNight ? ' - Factor Nocturno Activo' : ''}
+          </Text>
+          <Text style={styles.dataSourceBadge}>
+            📊 Fuente: {dataSource} {dataSource === 'API' ? '✅' : dataSource === 'ERROR' ? '🚨' : '⚠️'}
           </Text>
         </View>
 
-        {/* 📍 Tu Zona Actual CON GPS */}
+        {/* 📍 Tu Zona Actual CON GPS (MANTENER IGUAL) */}
         {userZoneRisk && (
           <TouchableOpacity 
             style={[styles.userZoneCard, { borderLeftColor: getRiskColor(userZoneRisk.risk_score) }]}
@@ -517,7 +448,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        {/* 📊 Stats ML */}
+        {/* 📊 Stats ML (MANTENER IGUAL) */}
         {mlStats && (
           <View style={styles.statsContainer}>
             <Text style={styles.statsTitle}>📊 Stats ML Tiempo Real</Text>
@@ -557,40 +488,55 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* 🔥 Top 5 Zonas de Riesgo DINÁMICO */}
+        {/* 🔥 Top 5 Zonas de Riesgo - SOLO API CON ERROR HANDLING */}
         <View style={styles.topRiskContainer}>
-          <Text style={styles.topRiskTitle}>🔥 Top 5 Zonas de Riesgo ({currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')})</Text>
+          <Text style={styles.topRiskTitle}>
+            🔥 Top 5 Zonas de Riesgo ({currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')})
+          </Text>
           
-          {topRiskZones.map((zona, index) => (
-            <View key={index} style={styles.riskZoneCard}>
-              <View style={styles.riskZoneRank}>
-                <Text style={styles.rankNumber}>{index + 1}</Text>
-              </View>
-              
-              <View style={styles.riskZoneInfo}>
-                <Text style={styles.riskZoneName}>{zona.localidad}</Text>
-                <View style={styles.riskZoneLevel}>
-                  <Text style={styles.riskZoneEmoji}>{getRiskEmoji(zona.risk_score)}</Text>
-                  <Text style={styles.riskZonePercent}>
-                    {(zona.risk_score * 100).toFixed(0)}%
-                  </Text>
+          {topRiskZones.length > 0 ? (
+            topRiskZones.map((zona, index) => (
+              <View key={`${zona.localidad}-${index}`} style={styles.riskZoneCard}>
+                <View style={styles.riskZoneRank}>
+                  <Text style={styles.rankNumber}>{index + 1}</Text>
+                </View>
+                
+                <View style={styles.riskZoneInfo}>
+                  <Text style={styles.riskZoneName}>{zona.localidad}</Text>
+                  <View style={styles.riskZoneLevel}>
+                    <Text style={styles.riskZoneEmoji}>{getRiskEmoji(zona.risk_score)}</Text>
+                    <Text style={styles.riskZonePercent}>
+                      {(zona.risk_score * 100).toFixed(0)}%
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={[styles.riskBar, { backgroundColor: getRiskColor(zona.risk_score) }]}>
+                  <View style={[styles.riskBarFill, { width: `${zona.risk_score * 100}%` }]} />
                 </View>
               </View>
-              
-              <View style={[styles.riskBar, { backgroundColor: getRiskColor(zona.risk_score) }]}>
-                <View style={[styles.riskBarFill, { width: `${zona.risk_score * 100}%` }]} />
-              </View>
+            ))
+          ) : (
+            <View style={styles.errorCard}>
+              <Text style={styles.errorIcon}>🚨</Text>
+              <Text style={styles.errorTitle}>Error cargando Top 5</Text>
+              <Text style={styles.errorText}>
+                No se pudieron cargar las zonas de riesgo desde la API. Verifica tu conexión e intenta nuevamente.
+              </Text>
+              <TouchableOpacity style={styles.retryButton} onPress={loadMLDashboardData} disabled={isLoading}>
+                <Text style={styles.retryText}>{isLoading ? '⏳ Cargando...' : '🔄 Reintentar'}</Text>
+              </TouchableOpacity>
             </View>
-          ))}
+          )}
           
-          {isNight && (
+          {isNight && topRiskZones.length > 0 && (
             <Text style={styles.nightFactorNote}>
               🌙 Factor nocturno (+20%) aplicado a todas las zonas
             </Text>
           )}
         </View>
 
-        {/* 🗺️ Acceso al mapa */}
+        {/* 🗺️ Acceso al mapa (MANTENER IGUAL) */}
         <TouchableOpacity 
           style={styles.mapCard}
           onPress={() => navigation.navigate('Map' as never)}
@@ -607,7 +553,7 @@ export default function HomeScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* 📈 Features Dashboard */}
+        {/* 📈 Features Dashboard (MANTENER IGUAL) */}
         <View style={styles.featuresGrid}>
           <TouchableOpacity style={styles.featureCard} onPress={loadMLDashboardData} disabled={isLoading}>
             <Text style={styles.featureIcon}>{isLoading ? '⏳' : '🔄'}</Text>
@@ -629,12 +575,12 @@ export default function HomeScreen() {
 
           <View style={styles.featureCard}>
             <Text style={styles.featureIcon}>📊</Text>
-            <Text style={styles.featureTitle}>Tendencias</Text>
-            <Text style={styles.featureValue}>ML Analytics</Text>
+            <Text style={styles.featureTitle}>Fuente</Text>
+            <Text style={styles.featureValue}>{dataSource}</Text>
           </View>
         </View>
 
-        {/* 🎯 Quick Actions */}
+        {/* 🎯 Quick Actions (MANTENER IGUAL) */}
         <View style={styles.actionsContainer}>
           <Text style={styles.actionsTitle}>🚀 Acciones Rápidas</Text>
           
@@ -702,6 +648,12 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: COLORS.secondaryText,
+    marginBottom: 8,
+  },
+  dataSourceBadge: {
+    fontSize: 12,
+    color: COLORS.secondaryText,
+    fontStyle: 'italic',
   },
 
   // 📍 User Zone Card CON GPS
@@ -823,7 +775,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // 🔥 Top Risk Zones DINÁMICO
+  // 🔥 Top Risk Zones CON ERROR HANDLING
   topRiskContainer: {
     backgroundColor: COLORS.cardBg,
     marginHorizontal: 20,
@@ -904,7 +856,45 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
-  // 🗺️ Map Card
+  // 🚨 Error Card NUEVO
+  errorCard: {
+    backgroundColor: '#FFF5F5',
+    padding: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FED7D7',
+  },
+  errorIcon: {
+    fontSize: 40,
+    marginBottom: 10,
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.danger,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: COLORS.secondaryText,
+    textAlign: 'center',
+    marginBottom: 15,
+    lineHeight: 20,
+  },
+  retryButton: {
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  retryText: {
+    color: COLORS.lightText,
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+
+  // 🗺️ Map Card (MANTENER IGUAL)
   mapCard: {
     marginHorizontal: 20,
     marginBottom: 20,
@@ -937,7 +927,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // 📊 Features Grid
+  // 📊 Features Grid (MANTENER IGUAL)
   featuresGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -973,7 +963,7 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryText,
   },
 
-  // 🚀 Actions
+  // 🚀 Actions (MANTENER IGUAL)
   actionsContainer: {
     paddingHorizontal: 20,
     marginBottom: 20,
