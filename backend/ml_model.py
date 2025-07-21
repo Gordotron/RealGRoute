@@ -1,44 +1,105 @@
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 import joblib
 import os
 from typing import Dict, Any, List, Tuple
+from datetime import datetime
 
 class RiskPredictor:
-    def __init__(self, auto_build=True):
+    def __init__(self, auto_build=True, verbose=True):
+        """🤖 Inicializar predictor de riesgo con datos oficiales de Bogotá"""
         self.model = None
         self.municipio_to_id: Dict[str, int] = {}
         self.id_to_municipio: Dict[int, str] = {}
         self.feature_columns = ['hora', 'dia_semana', 'mes', 'es_fin_semana', 'es_nocturno', 'municipio_encoded']
+        self.verbose = verbose
+        
+        if self.verbose:
+            print("🤖 INICIANDO REALGROUTE RISK PREDICTOR")
+            print("=" * 60)
+            print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"👤 Usuario: Gordotron")
+            print(f"🚀 Versión: 2.0.0 - Gold Data Edition")
         
         # 🚀 AUTO-INICIALIZACIÓN
         if auto_build:
             self.ensure_valid_model()
         
+    def normalize_localidad(self, localidad):
+        """🔧 Normaliza nombres de localidades para compatibilidad"""
+        if pd.isna(localidad):
+            return 'CENTRO'
+        
+        # Convertir a string y limpiar
+        localidad = str(localidad).strip()
+        
+        # Arreglar caracteres corruptos específicos
+        fixes = {
+            'Antonio Nari??o': 'Antonio Nariño',
+            'Los Mártires': 'Los Mártires',
+            'San Cristóbal': 'San Cristóbal'
+        }
+        
+        if localidad in fixes:
+            localidad = fixes[localidad]
+        
+        # Normalizar a mayúsculas
+        localidad = localidad.upper()
+        
+        # Mapeo para compatibilidad (sin tildes)
+        mappings = {
+            'ANTONIO NARIÑO': 'ANTONIO NARIÑO',
+            'BARRIOS UNIDOS': 'BARRIOS UNIDOS',
+            'CIUDAD BOLÍVAR': 'CIUDAD BOLIVAR',
+            'ENGATIVÁ': 'ENGATIVA',
+            'FONTIBÓN': 'FONTIBON',
+            'LOS MÁRTIRES': 'LOS MARTIRES',
+            'RAFAEL URIBE URIBE': 'RAFAEL URIBE URIBE',
+            'SAN CRISTÓBAL': 'SAN CRISTOBAL',
+            'TEUSAQUILLO': 'TEUSAQUILLO',
+            'TUNJUELITO': 'TUNJUELITO',
+            'USAQUÉN': 'USAQUEN',
+            'PUENTE ARANDA': 'PUENTE ARANDA',
+            'LA CANDELARIA': 'LA CANDELARIA',
+            'SANTA FE': 'SANTA FE',
+            'CHAPINERO': 'CHAPINERO',
+            'KENNEDY': 'KENNEDY',
+            'SUBA': 'SUBA',
+            'BOSA': 'BOSA',
+            'USME': 'USME'
+        }
+        
+        return mappings.get(localidad, localidad)
+        
     def ensure_valid_model(self):
         """🔧 Garantiza que hay un modelo válido - AUTO-CONSTRUCCIÓN"""
-        print("🔍 Verificando modelo de IA...")
+        if self.verbose:
+            print("\n🔍 Verificando modelo de IA...")
         
         if not self._model_exists():
-            print("❌ No existe modelo, construyendo automáticamente...")
+            if self.verbose:
+                print("❌ No existe modelo, construyendo automáticamente...")
             self._auto_build_model()
         elif not self._model_is_valid():
-            print("⚠️ Modelo inválido detectado, reconstruyendo...")
+            if self.verbose:
+                print("⚠️ Modelo inválido detectado, reconstruyendo...")
             self._auto_build_model()
         else:
-            print("✅ Modelo válido encontrado")
+            if self.verbose:
+                print("✅ Modelo válido encontrado")
             
         # Cargar modelo
         if not self._load_model():
-            print("🔧 Error cargando, construyendo nuevo modelo...")
+            if self.verbose:
+                print("🔧 Error cargando, construyendo nuevo modelo...")
             self._auto_build_model()
             self._load_model()
             
-        print(f"🎯 Modelo listo: {len(self.municipio_to_id)} municipios")
+        if self.verbose:
+            print(f"🎯 Modelo listo: {len(self.municipio_to_id)} municipios")
         
     def _model_exists(self) -> bool:
         """Verifica si existen los archivos del modelo"""
@@ -57,27 +118,185 @@ class RiskPredictor:
             # Debe tener municipios mapeados
             has_municipalities = len(metadata.get('municipio_to_id', {})) > 1
             
-            return has_three_classes and has_municipalities
+            # Verificar que municipio_encoded tenga importancia > 0
+            if hasattr(model, 'feature_importances_'):
+                municipio_importance = model.feature_importances_[-1]  # último feature
+                has_municipio_importance = municipio_importance > 0.1
+            else:
+                has_municipio_importance = True
+            
+            return has_three_classes and has_municipalities and has_municipio_importance
             
         except Exception as e:
-            print(f"⚠️ Error validando modelo: {e}")
+            if self.verbose:
+                print(f"⚠️ Error validando modelo: {e}")
             return False
     
     def _auto_build_model(self):
-        """🤖 Construye automáticamente un modelo balanceado"""
-        print("🏗️ Construyendo modelo balanceado...")
+        """🤖 Construye automáticamente un modelo con datos oficiales"""
+        if self.verbose:
+            print("\n🏗️ Construyendo modelo con datos oficiales...")
         
-        # Crear dataset sintético balanceado
-        df = self._create_balanced_dataset(3000)
+        # Intentar cargar datos oficiales primero
+        if os.path.exists('data/security/security_points_processed.csv'):
+            if self.verbose:
+                print("📊 Datos oficiales encontrados, usando datos reales...")
+            df = pd.read_csv('data/security/security_points_processed.csv')
+            official_data = self._prepare_official_data(df)
+            self.train_model(official_data)
+        else:
+            if self.verbose:
+                print("⚠️ No hay datos oficiales, creando dataset sintético balanceado...")
+            df = self._create_balanced_dataset(3000)
+            self.train_model(df)
         
-        # Entrenar modelo
-        self.train_model(df)
+        if self.verbose:
+            print("✅ Modelo construido y guardado automáticamente")
+    
+    def _prepare_official_data(self, security_points_df: pd.DataFrame) -> pd.DataFrame:
+        """📊 Prepara datos oficiales para entrenamiento"""
+        if self.verbose:
+            print(f"\n📊 PREPARANDO DATOS OFICIALES")
+            print("-" * 40)
+            print(f"📈 Puntos oficiales cargados: {len(security_points_df)}")
         
-        print("✅ Modelo construido y guardado automáticamente")
+        # Normalizar localidades
+        security_points_df['localidad_clean'] = security_points_df['localidad'].apply(self.normalize_localidad)
+        
+        unique_clean = security_points_df['localidad_clean'].unique()
+        if self.verbose:
+            print(f"🏘️ Localidades encontradas ({len(unique_clean)}):")
+            for i, loc in enumerate(sorted(unique_clean)[:10]):  # Mostrar solo 10
+                count = len(security_points_df[security_points_df['localidad_clean'] == loc])
+                print(f"  {loc}: {count} puntos")
+            if len(unique_clean) > 10:
+                print(f"  ... y {len(unique_clean) - 10} más")
+        
+        # Crear mapeo correcto
+        self.municipio_to_id = {loc: idx for idx, loc in enumerate(sorted(unique_clean))}
+        self.id_to_municipio = {v: k for k, v in self.municipio_to_id.items()}
+        
+        # Factores de riesgo por localidad (basados en realidad de Bogotá)
+        localidad_risk_factors = {
+            'CIUDAD BOLIVAR': 0.25,      # Zona más peligrosa
+            'SAN CRISTOBAL': 0.20,       # Alta criminalidad
+            'USME': 0.15,                # Periferia peligrosa
+            'RAFAEL URIBE URIBE': 0.15,  # Sur de Bogotá
+            'KENNEDY': 0.10,             # Densamente poblada
+            'BOSA': 0.10,                # Periferia sur
+            'TUNJUELITO': 0.08,          # Sur
+            'LOS MARTIRES': 0.05,        # Centro con problemas
+            'LA CANDELARIA': 0.05,       # Centro histórico
+            'SANTA FE': 0.05,            # Centro
+            'PUENTE ARANDA': 0.02,       # Industrial
+            'ANTONIO NARIÑO': 0.00,      # Residencial
+            'ENGATIVA': -0.02,           # Zona media-alta
+            'BARRIOS UNIDOS': -0.05,     # Zona media
+            'FONTIBON': -0.05,           # Zona media
+            'TEUSAQUILLO': -0.08,        # Zona alta
+            'CHAPINERO': -0.10,          # Zona alta
+            'SUBA': -0.12,               # Zona residencial segura
+            'USAQUEN': -0.15,            # Zona más segura
+        }
+        
+        # Generar ejemplos de entrenamiento
+        training_examples = []
+        
+        if self.verbose:
+            print(f"\n🤖 Generando ejemplos de entrenamiento...")
+        
+        for _, point in security_points_df.iterrows():
+            try:
+                localidad_clean = point['localidad_clean']
+                municipio_id = self.municipio_to_id[localidad_clean]
+                
+                # Factor de riesgo base por localidad
+                localidad_factor = localidad_risk_factors.get(localidad_clean, 0.0)
+                
+                # Crear ejemplos variados
+                for hora in [6, 8, 10, 12, 14, 16, 18, 20, 22, 0, 2]:
+                    for dia in [0, 1, 2, 3, 4, 5, 6]:  # Todos los días
+                        
+                        # Risk base del punto oficial
+                        risk_base = point['risk_score']
+                        
+                        # Agregar factor de localidad
+                        risk_base += localidad_factor
+                        
+                        # Factores temporales
+                        if 22 <= hora or hora <= 5:  # Noche profunda
+                            risk_base += 0.20
+                        elif 18 <= hora <= 21:       # Noche temprana
+                            risk_base += 0.10
+                        elif 6 <= hora <= 8:         # Amanecer
+                            risk_base += 0.05
+                        
+                        # Factor día de semana
+                        if dia in [5, 6]:  # Sábado, domingo
+                            risk_base += 0.12
+                        elif dia == 4:     # Viernes
+                            risk_base += 0.08
+                        
+                        # Factores adicionales de los datos oficiales
+                        if 'iluminacion_score' in point and not pd.isna(point['iluminacion_score']):
+                            ilum_penalty = (1 - point['iluminacion_score']) * 0.08
+                            risk_base += ilum_penalty
+                        
+                        if 'personas_score' in point and not pd.isna(point['personas_score']):
+                            personas_penalty = (1 - point['personas_score']) * 0.06
+                            risk_base += personas_penalty
+                        
+                        # Normalizar
+                        risk_final = np.clip(risk_base, 0.0, 1.0)
+                        
+                        # Convertir a categoría
+                        if risk_final < 0.35:
+                            risk_category = 0  # Bajo
+                        elif risk_final < 0.65:
+                            risk_category = 1  # Medio
+                        else:
+                            risk_category = 2  # Alto
+                        
+                        training_examples.append({
+                            'hora': hora,
+                            'dia_semana': dia,
+                            'mes': 7,
+                            'es_fin_semana': 1 if dia in [5, 6] else 0,
+                            'es_nocturno': 1 if (hora >= 20 or hora <= 6) else 0,
+                            'municipio_encoded': municipio_id,  # ✅ ID CORRECTO!
+                            'risk_level': risk_category
+                        })
+            
+            except Exception as e:
+                if self.verbose:
+                    print(f"⚠️ Error con punto: {e}")
+                continue
+        
+        training_df = pd.DataFrame(training_examples)
+        
+        if self.verbose:
+            print(f"✅ Ejemplos generados: {len(training_df):,}")
+            
+            # Distribución por municipio (mostrar top 5)
+            municipio_counts = training_df['municipio_encoded'].value_counts().sort_index()
+            print(f"\n📊 Top 5 municipios por ejemplos:")
+            for i, (muni_id, count) in enumerate(municipio_counts.head().items()):
+                muni_name = self.id_to_municipio[muni_id]
+                print(f"  {muni_name}: {count:,} ejemplos")
+            
+            # Distribución por riesgo
+            risk_counts = training_df['risk_level'].value_counts().sort_index()
+            print(f"\n📊 Distribución por riesgo:")
+            print(f"  Bajo (0): {risk_counts.get(0, 0):,}")
+            print(f"  Medio (1): {risk_counts.get(1, 0):,}")
+            print(f"  Alto (2): {risk_counts.get(2, 0):,}")
+        
+        return training_df
     
     def _create_balanced_dataset(self, n_samples: int = 3000) -> pd.DataFrame:
-        """📊 Crea dataset sintético balanceado (lógica de rebuild_model.py)"""
-        print(f"📊 Creando dataset balanceado con {n_samples} ejemplos...")
+        """📊 Crea dataset sintético balanceado (fallback)"""
+        if self.verbose:
+            print(f"📊 Creando dataset sintético balanceado con {n_samples} ejemplos...")
         
         # Municipios de Bogotá con sus niveles base de riesgo
         municipios_bogota = {
@@ -158,136 +377,41 @@ class RiskPredictor:
         
         df = pd.DataFrame(examples)
         
-        # Mostrar distribución
-        distribution = df['risk_level'].value_counts().sort_index()
-        print(f"📈 Distribución: Bajo({distribution.get(0, 0)}) Medio({distribution.get(1, 0)}) Alto({distribution.get(2, 0)})")
+        if self.verbose:
+            # Mostrar distribución
+            distribution = df['risk_level'].value_counts().sort_index()
+            print(f"📈 Distribución sintética: Bajo({distribution.get(0, 0)}) Medio({distribution.get(1, 0)}) Alto({distribution.get(2, 0)})")
         
         return df
         
-    def _encode_municipio(self, municipios: List[str]) -> Dict[str, int]:
-        """Encode municipios manualmente sin LabelEncoder"""
-        unique_municipios = list(set(municipios))
-        municipio_to_id = {muni: idx for idx, muni in enumerate(unique_municipios)}
-        return municipio_to_id
-        
-    def prepare_training_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Prepara datos para entrenar el modelo - VERSIÓN SIMPLIFICADA"""
-        print("🔧 Preparando datos para entrenamiento...")
-        
-        # Si es un dataset ya balanceado (viene de _create_balanced_dataset)
-        if 'risk_level' in df.columns:
-            return df
-        
-        # Si son datos reales de crimen, usar lógica original pero mejorada
-        if len(df) == 0:
-            print("⚠️ No hay datos, creando dataset sintético")
-            return self._create_balanced_dataset(3000)
-        
-        # Encode municipios manualmente
-        municipios_list = df['municipio'].unique().tolist()
-        self.municipio_to_id = self._encode_municipio(municipios_list)
-        self.id_to_municipio = {v: k for k, v in self.municipio_to_id.items()}
-        
-        print(f"📍 Municipios encontrados: {list(self.municipio_to_id.keys())}")
-        
-        # Crear ejemplos de entrenamiento basados en datos reales
-        training_data = []
-        
-        # Estrategia: Usar cada crimen como base para crear ejemplos
-        for _, crime in df.iterrows():
-            try:
-                municipio = str(crime['municipio']).upper().strip()
-                hora = int(crime['hora'])
-                dia_semana = int(crime['dia_semana'])
-                mes = int(crime['mes'])
-                
-                # Skip si datos inválidos
-                if municipio not in self.municipio_to_id:
-                    continue
-                    
-                municipio_encoded = self.municipio_to_id[municipio]
-                
-                # Calcular riesgo basado en factores conocidos
-                risk_score = 0.3  # Base
-                
-                # Factor hora (noche = más riesgo)
-                if 22 <= hora or hora <= 5:  # 10 PM - 5 AM
-                    risk_score += 0.4
-                elif 18 <= hora <= 21:  # 6 PM - 9 PM
-                    risk_score += 0.2
-                elif 6 <= hora <= 8:   # 6 AM - 8 AM
-                    risk_score += 0.1
-                
-                # Factor día (fin de semana = más riesgo)
-                if dia_semana in [5, 6]:  # Sábado, Domingo
-                    risk_score += 0.2
-                
-                # Factor mes (algunos meses más riesgosos)
-                if mes in [12, 1, 6, 7]:  # Diciembre, enero, junio, julio
-                    risk_score += 0.1
-                
-                # Normalizar
-                risk_score = min(risk_score, 1.0)
-                
-                # Convertir a categorías
-                if risk_score < 0.4:
-                    risk_level = 0  # Bajo
-                elif risk_score < 0.7:
-                    risk_level = 1  # Medio
-                else:
-                    risk_level = 2  # Alto
-                
-                # Crear ejemplo
-                example = {
-                    'hora': hora,
-                    'dia_semana': dia_semana,
-                    'mes': mes,
-                    'es_fin_semana': 1 if dia_semana in [5, 6] else 0,
-                    'es_nocturno': 1 if (hora >= 20 or hora <= 6) else 0,
-                    'municipio_encoded': municipio_encoded,
-                    'risk_level': risk_level
-                }
-                
-                training_data.append(example)
-                
-            except Exception as e:
-                print(f"⚠️ Error procesando crimen: {e}")
-                continue
-        
-        # Crear DataFrame
-        training_df = pd.DataFrame(training_data)
-        
-        if len(training_df) == 0:
-            print("❌ No se pudieron crear ejemplos de entrenamiento")
-            return self._create_balanced_dataset(3000)
-        
-        print(f"📊 Distribución de clases:")
-        print(training_df['risk_level'].value_counts())
-        print(f"✅ Preparados {len(training_df)} ejemplos de entrenamiento")
-        
-        return training_df
-    
     def train_model(self, df: pd.DataFrame) -> None:
         """Entrena el modelo de predicción de riesgo"""
-        print("🤖 Entrenando modelo de IA...")
+        if self.verbose:
+            print(f"\n🤖 ENTRENANDO MODELO DE IA")
+            print("-" * 40)
         
         try:
-            # Preparar datos
-            training_df = self.prepare_training_data(df)
+            # Usar datos directamente si ya están preparados
+            if 'risk_level' in df.columns:
+                training_df = df
+            else:
+                training_df = self._prepare_official_data(df)
             
             if training_df is None or len(training_df) < 5:
-                print("❌ Muy pocos datos, usando datos sintéticos")
+                if self.verbose:
+                    print("❌ Muy pocos datos, usando datos sintéticos")
                 training_df = self._create_balanced_dataset(3000)
             
             # Separar features y target
             X = training_df[self.feature_columns]
             y = training_df['risk_level']
             
-            print(f"📈 Entrenando con {len(X)} ejemplos")
+            if self.verbose:
+                print(f"📈 Entrenando con {len(X):,} ejemplos")
             
             # Entrenar modelo
             self.model = RandomForestClassifier(
-                n_estimators=50,  # Más árboles para mejor precisión
+                n_estimators=50,
                 max_depth=10,
                 random_state=42,
                 min_samples_split=2,
@@ -305,58 +429,77 @@ class RiskPredictor:
                 # Evaluar
                 y_pred = self.model.predict(X_test)
                 accuracy = accuracy_score(y_test, y_pred)
-                print(f"📊 Precisión del modelo: {accuracy:.3f}")
                 
-                # Mostrar distribución de clases
-                unique, counts = np.unique(y, return_counts=True)
-                print(f"📈 Clases entrenadas: {dict(zip(unique, counts))}")
+                if self.verbose:
+                    print(f"📊 Precisión del modelo: {accuracy:.3f}")
+                    
+                    # Feature importance
+                    if hasattr(self.model, 'feature_importances_'):
+                        print(f"\n🎯 Importancia de características:")
+                        importances = self.model.feature_importances_
+                        for feature, importance in zip(self.feature_columns, importances):
+                            print(f"  {feature}: {importance:.3f}")
                 
             else:
                 # Entrenar con todos los datos
                 self.model.fit(X, y)
-                print("📊 Modelo entrenado con todos los datos disponibles")
+                if self.verbose:
+                    print("📊 Modelo entrenado con todos los datos disponibles")
             
             # Guardar modelo
             self._save_model()
             
-            if len(X) >= 10:
-                try:
-                    print("\n🔍 Iniciando evaluación exhaustiva...")
-                    from model_evaluation import ModelEvaluator
-                    
-                    evaluator = ModelEvaluator(self.feature_columns, self.id_to_municipio)
-                    evaluation_results = evaluator.comprehensive_evaluation(
-                        self.model, X_test, y_test, X_train, y_train
-                    )
-                    
-                    # Guardar resultados de evaluación
-                    import json
-                    with open('data/evaluation_results.json', 'w') as f:
-                        # Convertir numpy types para JSON
-                        def convert_numpy(obj):
-                            if isinstance(obj, np.integer):
-                                return int(obj)
-                            elif isinstance(obj, np.floating):
-                                return float(obj)
-                            elif isinstance(obj, np.ndarray):
-                                return obj.tolist()
-                            return str(obj)
-                        
-                        json.dump(evaluation_results, f, indent=2, default=convert_numpy)
-                    
-                    print(f"📊 Evaluación completa guardada en: data/evaluation_results.json")
-                    
-                except Exception as e:
-                    print(f"⚠️ Error en evaluación exhaustiva: {e}")
-                    print("✅ Modelo entrenado correctamente, evaluación básica completada")
-            
-            print("✅ Modelo entrenado y evaluado!")
+            if self.verbose:
+                print("✅ Modelo entrenado y guardado!")
+                
+                # Test rápido
+                self._quick_test()
 
         except Exception as e:
-            print(f"❌ Error entrenando modelo: {e}")
+            if self.verbose:
+                print(f"❌ Error entrenando modelo: {e}")
             self._create_fallback_model()
     
-
+    def _quick_test(self):
+        """🧪 Test rápido del modelo entrenado"""
+        if self.verbose:
+            print(f"\n🧪 TEST RÁPIDO DEL MODELO")
+            print("-" * 30)
+        
+        test_cases = [
+            ('CHAPINERO', 14, 2, 'Zona segura + Día'),
+            ('CIUDAD BOLIVAR', 14, 2, 'Zona peligrosa + Día'),
+            ('USAQUEN', 10, 1, 'Zona muy segura'),
+            ('CIUDAD BOLIVAR', 22, 6, 'Zona peligrosa + Noche + Sábado')
+        ]
+        
+        for municipio, hora, dia, desc in test_cases:
+            try:
+                risk = self.predict_risk(municipio, hora, dia)
+                nivel = "Alto" if risk > 0.6 else ("Medio" if risk > 0.3 else "Bajo")
+                if self.verbose:
+                    print(f"  📍 {municipio}: {risk:.3f} ({nivel}) - {desc}")
+            except Exception as e:
+                if self.verbose:
+                    print(f"  ❌ {municipio}: Error - {e}")
+        
+        # Verificar diferenciación
+        if len(test_cases) >= 2:
+            try:
+                risk1 = self.predict_risk(test_cases[0][0], 14, 2)
+                risk2 = self.predict_risk(test_cases[1][0], 14, 2)
+                diff = abs(risk2 - risk1)
+                
+                if self.verbose:
+                    print(f"\n🔍 Verificación diferenciación:")
+                    print(f"  Diferencia entre zonas: {diff:.3f}")
+                    if diff > 0.05:
+                        print(f"  ✅ ¡Modelo diferencia correctamente!")
+                    else:
+                        print(f"  ⚠️ Diferenciación baja")
+            except Exception as e:
+                if self.verbose:
+                    print(f"  ❌ Error en verificación: {e}")
 
     def _save_model(self) -> None:
         """Guardar modelo y mapeos"""
@@ -385,12 +528,14 @@ class RiskPredictor:
             
             return True
         except Exception as e:
-            print(f"⚠️ Error cargando modelo: {e}")
+            if self.verbose:
+                print(f"⚠️ Error cargando modelo: {e}")
             return False
     
     def _create_fallback_model(self) -> None:
         """Crear modelo básico si todo falla"""
-        print("🔧 Creando modelo básico de emergencia...")
+        if self.verbose:
+            print("🔧 Creando modelo básico de emergencia...")
         
         # Datos mínimos balanceados
         X = np.array([
@@ -413,7 +558,8 @@ class RiskPredictor:
         self.id_to_municipio = {v: k for k, v in self.municipio_to_id.items()}
         
         self._save_model()
-        print("✅ Modelo básico creado")
+        if self.verbose:
+            print("✅ Modelo básico creado")
     
     def predict_risk(self, municipio: str, hora: int, dia_semana: int = 1, mes: int = 7) -> float:
         """Predice riesgo para una zona-hora específica"""
@@ -423,11 +569,11 @@ class RiskPredictor:
             self.ensure_valid_model()
     
         try:
-            # Obtener ID del municipio
-            municipio_clean = municipio.upper().strip()
-            municipio_id = self.municipio_to_id.get(municipio_clean, 0)  # Default a 0
+            # Normalizar municipio y obtener ID
+            municipio_clean = self.normalize_localidad(municipio)
+            municipio_id = self.municipio_to_id.get(municipio_clean, 0)
         
-            # 🔧 CAMBIO: Crear DataFrame en lugar de array
+            # Crear DataFrame para predicción
             features_dict = {
                 'hora': [hora],
                 'dia_semana': [dia_semana],
@@ -451,7 +597,8 @@ class RiskPredictor:
             return min(max(float(risk_score), 0.0), 1.0)
         
         except Exception as e:
-            print(f"⚠️ Error en predicción: {e}")
+            if self.verbose:
+                print(f"⚠️ Error en predicción: {e}")
             return self._heuristic_prediction(hora, dia_semana)
     
     def _heuristic_prediction(self, hora: int, dia_semana: int) -> float:
@@ -473,35 +620,15 @@ class RiskPredictor:
 # Test del modelo
 if __name__ == "__main__":
     try:
-        print("🚀 Iniciando entrenamiento del modelo...")
+        print("🚀 INICIANDO REALGROUTE ML MODEL")
+        print("=" * 80)
         
-        # Cargar datos
-        if os.path.exists('data/crime_clean.csv'):
-            df = pd.read_csv('data/crime_clean.csv')
-            print(f"📊 Datos cargados: {len(df)} registros")
-        else:
-            print("❌ No se encontraron datos, usando sintéticos")
-            df = pd.DataFrame()  # DataFrame vacío
+        # Entrenar modelo con auto-construcción y verbose
+        predictor = RiskPredictor(auto_build=True, verbose=True)
         
-        # Entrenar modelo con auto-construcción
-        predictor = RiskPredictor(auto_build=True)
-        
-        # Test predicciones
-        test_cases = [
-            ('CHAPINERO', 22, 5),  # Viernes 10 PM
-            ('USAQUEN', 14, 2),    # Martes 2 PM
-            ('SUBA', 2, 6),        # Sábado 2 AM
-            ('CIUDAD BOLIVAR', 2, 6),  # Sábado 2 AM (peligroso)
-            ('UNKNOWN', 12, 1),    # Municipio desconocido
-        ]
-        
-        print("\n🎯 Predicciones de prueba:")
-        for municipio, hora, dia in test_cases:
-            risk = predictor.predict_risk(municipio, hora, dia)
-            nivel = "Alto" if risk > 0.6 else ("Medio" if risk > 0.3 else "Bajo")
-            print(f"  📍 {municipio} {hora}:00 día {dia}: {risk:.3f} ({nivel})")
-        
-        print("\n✅ Modelo funcionando correctamente!")
+        print(f"\n🎉 ¡MODELO LISTO PARA USAR!")
+        print(f"✅ {len(predictor.municipio_to_id)} municipios mapeados")
+        print(f"✅ Listo para integrar con API")
         
     except Exception as e:
         print(f"❌ Error general: {e}")

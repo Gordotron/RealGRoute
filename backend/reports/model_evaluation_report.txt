@@ -1,52 +1,52 @@
 ================================================================================
 🛡️ SAFE ROUTES - REPORTE DE EVALUACIÓN DEL MODELO
 ================================================================================
-Fecha: 2025-07-19 15:48:46
+Fecha: 2025-07-20 14:15:02
 Evaluado por: Gordotron
 
 📈 MÉTRICAS GENERALES
 ----------------------------------------
-Accuracy: 0.977
-Precision (weighted): 0.977
-Recall (weighted): 0.977
-F1-Score (weighted): 0.977
+Accuracy: 0.629
+Precision (weighted): 0.587
+Recall (weighted): 0.629
+F1-Score (weighted): 0.582
 
 🛡️ MÉTRICAS DE SEGURIDAD
 ----------------------------------------
 Safety Score: 1.000
-Precision Alto Riesgo: 0.988
-Recall Alto Riesgo: 0.977
-Errores Críticos: 0/173
+Precision Alto Riesgo: 0.699
+Recall Alto Riesgo: 0.855
+Errores Críticos: 38/169509
 Tasa de Error Crítico: 0.0%
 
 📊 IMPORTANCIA DE CARACTERÍSTICAS
 ----------------------------------------
-municipio_encoded: 0.466
-es_fin_semana: 0.138
-hora: 0.127
-dia_semana: 0.119
-es_nocturno: 0.116
-mes: 0.032
+municipio_encoded: 0.550
+hora: 0.226
+es_nocturno: 0.113
+dia_semana: 0.082
+es_fin_semana: 0.029
+mes: 0.000
 
 🔍 ANÁLISIS DE ERRORES
 ----------------------------------------
-Total errores: 14
-Tasa de error: 2.3%
+Total errores: 114108
+Tasa de error: 37.1%
 Municipios problemáticos:
-  - LOS MARTIRES: 5 errores
-  - KENNEDY: 2 errores
-  - SAN CRISTOBAL: 2 errores
-  - ANTONIO NARIÑO: 1 errores
-  - PUENTE ARANDA: 1 errores
+  - SUBA: 22318 errores
+  - ENGATIVA: 13518 errores
+  - KENNEDY: 11636 errores
+  - USAQUEN: 9901 errores
+  - TEUSAQUILLO: 8229 errores
 Horas problemáticas:
-  - 8:00h: 5 errores
-  - 6:00h: 2 errores
-  - 10:00h: 2 errores
-  - 9:00h: 1 errores
-  - 15:00h: 1 errores
+  - 16:00h: 12413 errores
+  - 12:00h: 12393 errores
+  - 14:00h: 12317 errores
+  - 10:00h: 12309 errores
+  - 8:00h: 11288 errores
 
 🎯 CONCLUSIONES
 ----------------------------------------
-El modelo alcanza un accuracy de 97.7% con un safety score de 100.0%.
+El modelo alcanza un accuracy de 62.9% con un safety score de 100.0%.
 ✅ Excelente detección de casos de alto riesgo (< 5% errores críticos).
 La característica más importante es: municipio_encoded

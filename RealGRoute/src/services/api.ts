@@ -15,6 +15,36 @@ export interface RiskPrediction {
   risk_level: string;
 }
 
+// 🆕 INTERFACE PARA PUNTOS OFICIALES DE SEGURIDAD
+export interface SecurityPoint {
+  lat: number;
+  lng: number;
+  risk_score: number;
+  localidad: string;
+  direccion: string;
+  source: string;
+}
+
+// 🆕 INTERFACE PARA EQUIPAMIENTOS DE SEGURIDAD
+export interface SecurityEquipment {
+  type: string;
+  name: string;
+  lat: number;
+  lng: number;
+  address: string;
+  phone: string;
+  risk_modifier: number;
+}
+
+// 🆕 INTERFACE PARA HEALTH CHECK DETALLADO
+export interface HealthStatus {
+  api_status: string;
+  model_status: string;
+  security_data_status: string;
+  municipios_disponibles: number;
+  data_directory: string;
+}
+
 export class SafeRoutesAPI {
   private baseURL = __DEV__ 
     ? 'http://192.168.2.9:8000'  // Tu FastAPI local
@@ -94,17 +124,138 @@ export class SafeRoutesAPI {
     }
   }
 
-  // 🏥 Health check del backend
-  async healthCheck(): Promise<boolean> {
+  // 🔥 OBTENER PUNTOS OFICIALES DE SEGURIDAD (DATOS GOLD)
+  async getOfficialSecurityPoints(): Promise<SecurityPoint[]> {
     try {
-      await this.makeRequest('/health');
-      return true;
+      console.log('🔥 Cargando puntos oficiales de seguridad...');
+      
+      const data = await this.makeRequest<{
+        official_points: SecurityPoint[];
+        total: number;
+        data_source: string;
+        precision: string;
+      }>('/security-points');
+
+      console.log(`✅ ${data.total} puntos oficiales cargados desde: ${data.data_source}`);
+      
+      // 💾 Cache de puntos oficiales
+      await this.cacheSecurityPoints(data.official_points);
+      
+      return data.official_points;
+    } catch (error) {
+      console.log('🔄 Error cargando puntos oficiales, usando cache...');
+      return await this.getCachedSecurityPoints();
+    }
+  }
+
+  // 🏛️ OBTENER EQUIPAMIENTOS DE SEGURIDAD (CAI, POLICÍA)
+  async getSecurityEquipment(): Promise<SecurityEquipment[]> {
+    try {
+      console.log('🏛️ Cargando equipamientos de seguridad...');
+      
+      const data = await this.makeRequest<{
+        equipment: SecurityEquipment[];
+        total: number;
+        types: string[];
+      }>('/security-equipment');
+
+      console.log(`✅ ${data.total} equipamientos cargados: ${data.types.join(', ')}`);
+      
+      return data.equipment;
+    } catch (error) {
+      console.log('⚠️ Error cargando equipamientos de seguridad');
+      return [];
+    }
+  }
+
+  // 🚀 INTEGRAR DATOS OFICIALES AUTOMÁTICAMENTE
+  async integrateOfficialData(): Promise<{success: boolean, message: string}> {
+    try {
+      console.log('🚀 Iniciando integración automática de datos oficiales...');
+      
+      const data = await this.makeRequest<{
+        message: string;
+        status: string;
+        output?: string;
+        error?: string;
+      }>('/integrate-official-data', {
+        method: 'POST'
+      });
+
+      const success = data.status === 'success';
+      
+      if (success) {
+        console.log('✅ Integración exitosa!');
+        // Limpiar caches para forzar recarga
+        await this.clearAllCaches();
+      }
+      
+      return {
+        success,
+        message: data.message
+      };
+    } catch (error) {
+      console.error('❌ Error en integración automática:', error);
+      return {
+        success: false,
+        message: `Error: ${error}`
+      };
+    }
+  }
+
+  // 🏥 Health check detallado del backend
+  async healthCheck(): Promise<HealthStatus | null> {
+    try {
+      const data = await this.makeRequest<HealthStatus>('/health');
+      return data;
+    } catch (error) {
+      console.log('❌ Health check failed');
+      return null;
+    }
+  }
+
+  // 🔍 Verificar si hay datos oficiales disponibles
+  async hasOfficialData(): Promise<boolean> {
+    try {
+      const health = await this.healthCheck();
+      return health?.security_data_status?.includes('oficiales') || false;
     } catch {
       return false;
     }
   }
 
-  // 💾 Cache management
+  // 💾 Cache management para puntos de seguridad oficiales
+  private async cacheSecurityPoints(data: SecurityPoint[]): Promise<void> {
+    try {
+      await AsyncStorage.setItem('security_points_cache', JSON.stringify({
+        data,
+        timestamp: Date.now()
+      }));
+    } catch (error) {
+      console.log('⚠️ Error guardando cache de puntos de seguridad:', error);
+    }
+  }
+
+  private async getCachedSecurityPoints(): Promise<SecurityPoint[]> {
+    try {
+      const cached = await AsyncStorage.getItem('security_points_cache');
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        const isRecent = Date.now() - timestamp < 86400000; // 24 horas
+        
+        if (isRecent) {
+          console.log('📦 Usando puntos de seguridad en cache');
+          return data;
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Error leyendo cache de seguridad:', error);
+    }
+
+    return []; // No hay fallback para datos oficiales
+  }
+
+  // 💾 Cache management para mapa de riesgo
   private async cacheRiskMap(data: RiskMapData[]): Promise<void> {
     try {
       await AsyncStorage.setItem('risk_map_cache', JSON.stringify({
@@ -136,6 +287,19 @@ export class SafeRoutesAPI {
     return this.getFallbackData();
   }
 
+  // 🧹 Limpiar todos los caches
+  private async clearAllCaches(): Promise<void> {
+    try {
+      await AsyncStorage.multiRemove([
+        'risk_map_cache',
+        'security_points_cache'
+      ]);
+      console.log('🧹 Caches limpiados');
+    } catch (error) {
+      console.log('⚠️ Error limpiando caches:', error);
+    }
+  }
+
   // 🔄 Predicción heurística de emergencia
   private heuristicPrediction(municipio: string, hora: number): RiskPrediction {
     const riskScores: Record<string, number> = {
@@ -150,7 +314,7 @@ export class SafeRoutesAPI {
 
     let baseRisk = riskScores[municipio.toUpperCase()] || 0.3;
     
-    // Factor nocturno (son las 23:31, perfecto para test!)
+    // Factor nocturno
     if (hora >= 20 || hora <= 6) {
       baseRisk += 0.2;
     }
