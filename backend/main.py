@@ -1,40 +1,41 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import pandas as pd
 from hybrid_risk_model import BalancedHybridRiskPredictor
-from intelligent_routing import IntelligentRouter  # 🆕 IMPORTAR ROUTER
+from intelligent_routing import IntelligentRouter
 import uvicorn
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
+from fastapi.responses import JSONResponse
 
 # Variables globales
 predictor = None
-intelligent_router = None  # 🆕 ROUTER GLOBAL
+intelligent_router = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     global predictor, intelligent_router
-    
+
     print("🚀 Iniciando RealGRoute 3.0 - Balanced Intelligence + Smart Routing Edition...")
     print("=" * 80)
-    
+
     try:
         os.makedirs('data', exist_ok=True)
-        
+
         # 🧠 INICIALIZAR MODELO BALANCEADO
         print("🧠 Inicializando modelo BALANCEADO...")
         predictor = BalancedHybridRiskPredictor(verbose=True)
-        
+
         print("🏗️ Entrenando modelo balanceado...")
         model = predictor.train_balanced_model()
-        
+
         # 🛣️ INICIALIZAR ROUTER INTELIGENTE
         print("\n🛣️ Inicializando ROUTER INTELIGENTE...")
         intelligent_router = IntelligentRouter(predictor, verbose=True)
-        
+
         print("=" * 80)
         print("🎉 RealGRoute 3.0 COMPLETO listo!")
         print(f"🧠 Modelo: {len(predictor.municipio_to_id)} municipios, {len(predictor.feature_columns)} features")
@@ -42,11 +43,11 @@ async def lifespan(app: FastAPI):
         print(f"🎯 Zonas: {len(predictor.zone_classifier)} tipos configurados")
         print("🌐 Documentación: http://localhost:8000/docs")
         print("=" * 80)
-        
+
     except Exception as e:
         print(f"❌ Error en startup: {e}")
         print("🔄 Intentando fallback...")
-        
+
         try:
             from ml_model import RiskPredictor
             predictor = RiskPredictor(auto_build=True)
@@ -55,15 +56,13 @@ async def lifespan(app: FastAPI):
         except Exception as fallback_error:
             print(f"❌ Error crítico: {fallback_error}")
             raise
-    
+
     yield
-    
-    # Shutdown
+
     print("🛑 Cerrando RealGRoute 3.0...")
 
-# ✅ APP CON LIFESPAN
 app = FastAPI(
-    title="Safe Routes API", 
+    title="Safe Routes API",
     version="3.0.0 - Balanced Intelligence + Smart Routing Edition",
     lifespan=lifespan
 )
@@ -76,7 +75,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🆕 MODELOS ACTUALIZADOS CON ROUTING
 class RiskRequest(BaseModel):
     municipio: str
     hora: int
@@ -95,6 +93,21 @@ class RiskResponse(BaseModel):
     coordinates: dict = None
     features_used: int = None
 
+class UserFeedbackCrimeRequest(BaseModel):
+    lat: float
+    lng: float
+    tipo: str
+    comentario: str
+    fecha: str
+    usuario: Optional[str] = None
+
+class UserFencingZoneRequest(BaseModel):
+    lat: float
+    lng: float
+    radio: float
+    nombre: str
+    usuario: str
+
 class RouteRequest(BaseModel):
     origen: str
     destino: str
@@ -107,14 +120,14 @@ class IntelligentRouteRequest(BaseModel):
     destino: str
     hora: int = 12
     dia_semana: int = 1
-    # Coordenadas opcionales para mayor precisión
     origen_lat: float = None
     origen_lng: float = None
     destino_lat: float = None
     destino_lng: float = None
+    preferencia: Optional[str] = "seguridad"  # "seguridad" o "tiempo"
+    sensibilidad_riesgo: Optional[float] = 0.6  # 0.0 a 1.0
 
 class RouteResponse(BaseModel):
-    """🆕 Response completa de routing"""
     route_points: List[dict]
     statistics: dict
     recommendations: List[str]
@@ -122,7 +135,6 @@ class RouteResponse(BaseModel):
     destination_info: dict
     model_type: str = "intelligent_routing_v3.0"
 
-# Coordenadas
 LOCALIDADES_COORDS = {
     'USAQUEN': {'lat': 4.7030, 'lng': -74.0350},
     'CHAPINERO': {'lat': 4.6590, 'lng': -74.0630},
@@ -150,7 +162,7 @@ async def root():
     is_balanced = hasattr(predictor, 'train_balanced_model') if predictor else False
     has_intelligent_router = intelligent_router is not None
     has_official_data = os.path.exists('data/security/security_points_processed.csv')
-    
+
     return {
         "message": "RealGRoute 3.0 - Balanced Intelligence + Smart Routing! 🧠🛣️",
         "status": "✅ Sistema completo" if (predictor and is_balanced and has_intelligent_router) else "⚠️ Sistema parcial",
@@ -173,18 +185,17 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """🏥 Health check del sistema COMPLETO"""
     global predictor, intelligent_router
-    
+
     if not predictor:
         return {"api_status": "❌ Offline", "model_status": "❌ No cargado", "router_status": "❌ No disponible"}
-    
+
     is_balanced = hasattr(predictor, 'train_balanced_model')
     has_intelligent_router = intelligent_router is not None
-    
+
     model_status = "✅ Balanceado funcionando" if is_balanced else "⚠️ Básico activo"
     router_status = "✅ Router inteligente activo" if has_intelligent_router else "❌ Router no disponible"
-    
+
     return {
         "api_status": "✅ Online",
         "model_status": model_status,
@@ -200,31 +211,30 @@ async def health_check():
 
 @app.post("/predict-risk", response_model=RiskResponse)
 async def predict_risk(request: RiskRequest):
-    """🔥 Predicción con modelo BALANCEADO (sin cambios)"""
     global predictor
-    
+
     if not predictor:
         raise HTTPException(status_code=503, detail="Modelo no disponible")
-    
+
     try:
         is_balanced = hasattr(predictor, 'predict_balanced_risk')
-        
+
         if is_balanced:
             if request.latitude and request.longitude:
                 lat, lng = request.latitude, request.longitude
             else:
                 coords = LOCALIDADES_COORDS.get(request.municipio.upper(), {'lat': 4.6, 'lng': -74.1})
                 lat, lng = coords['lat'], coords['lng']
-            
+
             risk_score = predictor.predict_balanced_risk(
                 request.municipio, lat, lng, request.hora, request.dia_semana
             )
-            
+
             zone_type = predictor.get_zone_type(request.municipio)
             model_type = "balanced_hybrid_v3.0"
             features_used = len(predictor.feature_columns)
             coordinates = {"lat": lat, "lng": lng}
-            
+
         else:
             risk_score = predictor.predict_risk(
                 request.municipio, request.hora, request.dia_semana, request.mes
@@ -233,14 +243,14 @@ async def predict_risk(request: RiskRequest):
             model_type = "basic_v2.0"
             features_used = 6
             coordinates = None
-        
+
         if risk_score < 0.3:
             risk_level = "Bajo"
         elif risk_score < 0.7:
             risk_level = "Medio"
         else:
             risk_level = "Alto"
-        
+
         return RiskResponse(
             municipio=request.municipio,
             hora=request.hora,
@@ -251,21 +261,20 @@ async def predict_risk(request: RiskRequest):
             coordinates=coordinates,
             features_used=features_used
         )
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en predicción: {str(e)}")
 
 @app.get("/risk-map")
 async def get_risk_map(hora: int = 12, dia_semana: int = 1):
-    """🗺️ Mapa de riesgo BALANCEADO (sin cambios)"""
     global predictor
-    
+
     if not predictor:
         raise HTTPException(status_code=503, detail="Modelo no disponible")
-        
+
     risk_map = []
     is_balanced = hasattr(predictor, 'predict_balanced_risk')
-    
+
     for localidad, coords in LOCALIDADES_COORDS.items():
         try:
             if is_balanced:
@@ -276,7 +285,7 @@ async def get_risk_map(hora: int = 12, dia_semana: int = 1):
             else:
                 risk_score = predictor.predict_risk(localidad, hora, dia_semana)
                 zone_type = "unknown"
-            
+
             risk_map.append({
                 "localidad": localidad,
                 "lat": coords["lat"],
@@ -295,37 +304,36 @@ async def get_risk_map(hora: int = 12, dia_semana: int = 1):
                 "risk_level": "Medio",
                 "zone_type": "error"
             })
-    
+
     return {
-        "risk_map": risk_map, 
-        "hora": hora, 
+        "risk_map": risk_map,
+        "hora": hora,
         "dia_semana": dia_semana,
         "model_type": "balanced_hybrid_v3.0" if is_balanced else "basic_v2.0"
     }
 
 @app.post("/smart-route")
 async def get_smart_route(request: RouteRequest):
-    """🛣️ Rutas BÁSICAS (mantenido para compatibilidad)"""
     global predictor
-    
+
     if not predictor:
         raise HTTPException(status_code=503, detail="Modelo no disponible")
-        
+
     origen_coords = LOCALIDADES_COORDS.get(request.origen.upper())
     destino_coords = LOCALIDADES_COORDS.get(request.destino.upper())
-    
+
     if not origen_coords or not destino_coords:
         raise HTTPException(status_code=400, detail="Localidad no encontrada")
-    
+
     is_balanced = hasattr(predictor, 'predict_balanced_risk')
-    
+
     if is_balanced:
         risk_origen = predictor.predict_balanced_risk(
             request.origen, origen_coords["lat"], origen_coords["lng"],
             request.hora, request.dia_semana
         )
         risk_destino = predictor.predict_balanced_risk(
-            request.destino, destino_coords["lat"], destino_coords["lng"], 
+            request.destino, destino_coords["lat"], destino_coords["lng"],
             request.hora, request.dia_semana
         )
         zone_origen = predictor.get_zone_type(request.origen)
@@ -334,19 +342,19 @@ async def get_smart_route(request: RouteRequest):
         risk_origen = predictor.predict_risk(request.origen, request.hora, request.dia_semana)
         risk_destino = predictor.predict_risk(request.destino, request.hora, request.dia_semana)
         zone_origen = zone_destino = "unknown"
-    
+
     risk_promedio = (risk_origen + risk_destino) / 2
-    
+
     return {
         "origen": {
-            "localidad": request.origen, 
-            **origen_coords, 
+            "localidad": request.origen,
+            **origen_coords,
             "risk_score": risk_origen,
             "zone_type": zone_origen
         },
         "destino": {
-            "localidad": request.destino, 
-            **destino_coords, 
+            "localidad": request.destino,
+            **destino_coords,
             "risk_score": risk_destino,
             "zone_type": zone_destino
         },
@@ -359,38 +367,226 @@ async def get_smart_route(request: RouteRequest):
         "note": "💡 Para routing inteligente usa /intelligent-route"
     }
 
+@app.post("/user-feedback-crime")
+async def user_feedback_crime(request: UserFeedbackCrimeRequest):
+    # Validar campos mínimos (permite 0.0 en lat/lng, pero no None)
+    if (
+        request.lat is None or request.lng is None or
+        not request.tipo or not request.comentario or not request.fecha
+    ):
+        raise HTTPException(status_code=400, detail="Faltan campos obligatorios.")
+    
+    # Crear directorio si no existe
+    os.makedirs("data", exist_ok=True)
+    csv_path = "data/user_feedback_crime.csv"
+    
+    # Preparar fila
+    row = {
+        "lat": request.lat,
+        "lng": request.lng,
+        "tipo": request.tipo,
+        "comentario": request.comentario,
+        "fecha": request.fecha,
+        "usuario": request.usuario if request.usuario else "",
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Guardar en CSV (agregar encabezado si es nuevo)
+    header = not os.path.exists(csv_path)
+    df = pd.DataFrame([row])
+    df.to_csv(csv_path, mode='a', header=header, index=False)
+    
+    return {
+        "status": "success",
+        "message": "Feedback almacenado correctamente.",
+        "row": row
+    }
+
+@app.post("/user-fencing-zone")
+async def save_user_fencing_zone(request: UserFencingZoneRequest):
+    
+    os.makedirs("data", exist_ok=True)
+    csv_path = "data/user_fencing_zones.csv"
+    row = request.dict()
+    # Guardar en CSV (append, header si es nuevo)
+    header = not os.path.exists(csv_path)
+    df = pd.DataFrame([row])
+    df.to_csv(csv_path, mode='a', header=header, index=False)
+    return {"status": "success", "zone": row}
+
+@app.get("/user-feedback-crime")
+async def get_user_feedback_crime(
+    skip: int = 0,
+    limit: int = 100,
+    usuario: Optional[str] = None,
+    tipo: Optional[str] = None,
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None,
+):
+
+    csv_path = "data/user_feedback_crime.csv"
+    if not os.path.exists(csv_path):
+        return {"feedbacks": [], "total": 0}
+
+    df = pd.read_csv(csv_path)
+
+    # Filtros
+    if usuario:
+        df = df[df["usuario"] == usuario]
+    if tipo:
+        df = df[df["tipo"] == tipo]
+    if fecha_desde:
+        df = df[df["fecha"] >= fecha_desde]
+    if fecha_hasta:
+        df = df[df["fecha"] <= fecha_hasta]
+
+    total = len(df)
+    # Paginación
+    feedbacks = df.iloc[skip: skip + limit].to_dict(orient="records")
+    return {"feedbacks": feedbacks, "total": total}
+
+@app.get("/user-fencing-zone")
+async def get_user_fencing_zones(
+    usuario: Optional[str] = None,
+    nombre: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100
+):
+    csv_path = "data/user_fencing_zones.csv"
+    if not os.path.exists(csv_path):
+        return {"zones": [], "total": 0}
+
+    df = pd.read_csv(csv_path)
+
+    # Filtros
+    if usuario:
+        df = df[df["usuario"] == usuario]
+    if nombre:
+        df = df[df["nombre"] == nombre]
+
+    total = len(df)
+    # Paginación
+    zones = df.iloc[skip: skip + limit].to_dict(orient="records")
+    return {"zones": zones, "total": total}
+
+@app.delete("/user-feedback-crime")
+async def delete_user_feedback_crime(
+    usuario: str = Body(...),
+    timestamp: str = Body(...)
+):
+    csv_path = "data/user_feedback_crime.csv"
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="No hay feedbacks")
+
+    df = pd.read_csv(csv_path)
+    original_total = len(df)
+    df = df[~((df["usuario"] == usuario) & (df["timestamp"] == timestamp))]
+    df.to_csv(csv_path, index=False)
+    deleted = original_total - len(df)
+    return {"status": "success" if deleted else "not found", "deleted": deleted}
+
+@app.delete("/user-fencing-zone")
+async def delete_user_fencing_zone(
+    usuario: str = Body(...),
+    nombre: str = Body(...)
+):
+    csv_path = "data/user_fencing_zones.csv"
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="No hay zonas")
+
+    df = pd.read_csv(csv_path)
+    original_total = len(df)
+    df = df[~((df["usuario"] == usuario) & (df["nombre"] == nombre))]
+    df.to_csv(csv_path, index=False)
+    deleted = original_total - len(df)
+    return {"status": "success" if deleted else "not found", "deleted": deleted}
+
+@app.put("/user-feedback-crime")
+async def update_user_feedback_crime(
+    usuario: str = Body(...),
+    timestamp: str = Body(...),
+    comentario: Optional[str] = Body(None),
+    tipo: Optional[str] = Body(None)
+):
+    csv_path = "data/user_feedback_crime.csv"
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="No hay feedbacks")
+
+    df = pd.read_csv(csv_path)
+    mask = (df["usuario"] == usuario) & (df["timestamp"] == timestamp)
+    if not mask.any():
+        raise HTTPException(status_code=404, detail="Feedback no encontrado")
+
+    if comentario:
+        df.loc[mask, "comentario"] = comentario
+    if tipo:
+        df.loc[mask, "tipo"] = tipo
+
+    df.to_csv(csv_path, index=False)
+    return {"status": "success", "updated": df[mask].to_dict(orient="records")}
+
+@app.put("/user-fencing-zone")
+async def update_user_fencing_zone(
+    usuario: str = Body(...),
+    nombre: str = Body(...),
+    nuevo_radio: Optional[float] = Body(None),
+    nuevo_nombre: Optional[str] = Body(None)
+):
+    csv_path = "data/user_fencing_zones.csv"
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="No hay zonas")
+
+    df = pd.read_csv(csv_path)
+    mask = (df["usuario"] == usuario) & (df["nombre"] == nombre)
+    if not mask.any():
+        raise HTTPException(status_code=404, detail="Zona no encontrada")
+
+    if nuevo_radio is not None:
+        df.loc[mask, "radio"] = nuevo_radio
+    if nuevo_nombre is not None:
+        df.loc[mask, "nombre"] = nuevo_nombre
+
+    df.to_csv(csv_path, index=False)
+    return {"status": "success", "updated": df[mask].to_dict(orient="records")}
+
 @app.post("/intelligent-route", response_model=RouteResponse)
 async def get_intelligent_route(request: IntelligentRouteRequest):
-    """🚀 ROUTING INTELIGENTE - La joya de la corona"""
     global predictor, intelligent_router
-    
+
     if not predictor:
         raise HTTPException(status_code=503, detail="Modelo no disponible")
-    
+
     if not intelligent_router:
         raise HTTPException(status_code=503, detail="Router inteligente no disponible - usa /smart-route como fallback")
-    
+
+    # 🆕 AJUSTAR PESOS SEGÚN preferencia/sensibilidad
+    if hasattr(intelligent_router, 'routing_factors'):
+        if request.preferencia == "seguridad":
+            intelligent_router.routing_factors['safety_weight'] = max(request.sensibilidad_riesgo or 0.6, 0.5)
+            intelligent_router.routing_factors['distance_weight'] = 1.0 - intelligent_router.routing_factors['safety_weight']
+            intelligent_router.routing_factors['time_weight'] = 0.1
+        elif request.preferencia == "tiempo":
+            intelligent_router.routing_factors['safety_weight'] = min(request.sensibilidad_riesgo or 0.3, 0.5)
+            intelligent_router.routing_factors['distance_weight'] = 0.5
+            intelligent_router.routing_factors['time_weight'] = 0.4
+
     try:
         # 🎯 Usar coordenadas específicas o coordenadas de municipios
         if request.origen_lat and request.origen_lng and request.destino_lat and request.destino_lng:
-            # 📍 Coordenadas específicas
             route_result = intelligent_router.find_safest_route(
                 request.origen_lat, request.origen_lng,
                 request.destino_lat, request.destino_lng,
                 request.hora, request.dia_semana
             )
         else:
-            # 🏙️ Usar nombres de municipios
             route_result = intelligent_router.get_route_with_intelligence(
                 request.origen, request.destino,
                 request.hora, request.dia_semana
             )
-        
-        # 🎯 Enriquecer respuesta
+
         route_result['model_type'] = "intelligent_routing_v3.0"
-        
         return RouteResponse(**route_result)
-    
+
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
@@ -398,18 +594,15 @@ async def get_intelligent_route(request: IntelligentRouteRequest):
 
 @app.get("/route-comparison")
 async def compare_routes(origen: str, destino: str, hora: int = 12, dia_semana: int = 1):
-    """📊 Compara routing básico vs inteligente"""
     global predictor, intelligent_router
-    
+
     if not predictor:
         raise HTTPException(status_code=503, detail="Modelo no disponible")
-    
+
     try:
-        # 🔄 Routing básico
         basic_request = RouteRequest(origen=origen, destino=destino, hora=hora, dia_semana=dia_semana)
         basic_result = await get_smart_route(basic_request)
-        
-        # 🧠 Routing inteligente (si disponible)
+
         intelligent_result = None
         if intelligent_router:
             try:
@@ -418,7 +611,7 @@ async def compare_routes(origen: str, destino: str, hora: int = 12, dia_semana: 
                 intelligent_result = intelligent_result.dict()
             except Exception as e:
                 intelligent_result = {"error": f"Error en routing inteligente: {str(e)}"}
-        
+
         return {
             "comparison": {
                 "basic_routing": basic_result,
@@ -437,21 +630,22 @@ async def compare_routes(origen: str, destino: str, hora: int = 12, dia_semana: 
                 "💡 Reinicia el servidor para habilitar routing inteligente"
             ]
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en comparación de rutas: {str(e)}")
 
 @app.get("/security-points")
 async def get_official_security_points():
-    """🔥 Datos oficiales de seguridad (sin cambios)"""
     try:
         security_path = 'data/security/security_points_processed.csv'
-        
+
         if not os.path.exists(security_path):
             raise HTTPException(
-                status_code=404, 
+                status_code=404,
                 detail="Datos oficiales no encontrados"
             )
-        
+
         security_df = pd.read_csv(security_path)
-        
+
         points = []
         for _, row in security_df.iterrows():
             points.append({
@@ -462,31 +656,28 @@ async def get_official_security_points():
                 "direccion": str(row.get('direccion', 'N/A')),
                 "source": "official_bogota_government_data"
             })
-        
+
         return {
-            "official_points": points, 
+            "official_points": points,
             "total": len(points),
             "data_source": "Secretaría Distrital de la Mujer - Bogotá D.C."
         }
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.get("/rebuild-model")
 async def rebuild_model():
-    """🔄 Reconstruir SISTEMA COMPLETO"""
     global predictor, intelligent_router
-    
+
     try:
         print("🔧 Reconstruyendo sistema completo...")
-        
-        # 🧠 Reconstruir modelo balanceado
+
         predictor = BalancedHybridRiskPredictor(verbose=True)
         model = predictor.train_balanced_model()
-        
-        # 🛣️ Reconstruir router inteligente
+
         intelligent_router = IntelligentRouter(predictor, verbose=True)
-        
+
         return {
             "message": "Sistema COMPLETO reconstruido exitosamente!",
             "model": {
@@ -502,7 +693,7 @@ async def rebuild_model():
             },
             "status": "✅ Sistema completo activo"
         }
-    
+
     except Exception as e:
         print(f"❌ Error en reconstrucción completa, probando básico...")
         try:
