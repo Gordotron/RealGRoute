@@ -231,7 +231,6 @@ export default function HomeScreen() {
       
       // 🚀 SOLO API - SIN FALLBACKS DINÁMICOS PARA TOP 5
       console.log("🤖 Calling API (ONLY source for Top 5)...");
-      // 🧪 TEST TEMPORAL - línea donde haces fetch
       const response = await fetch(`http://192.168.2.9:8000/risk-map?hora=12&dia_semana=1`);
       
       if (!response.ok) {
@@ -250,13 +249,13 @@ export default function HomeScreen() {
       globalMLData = riskMap;
       globalDataSource = "API";
       globalLoadTime = new Date().toLocaleTimeString();
-      // ✅ AGREGAR ESTE DEBUG DESPUÉS DE LA LÍNEA ANTERIOR:
+      
       console.log("🔍 === API LOCALIDADES COMPLETAS ===");
-          riskMap.forEach((loc: any, index: number) => {
-            console.log(`  ${index + 1}. ${loc.localidad}: ${(loc.risk_score * 100).toFixed(0)}%`);
-          });
-          
+      riskMap.forEach((loc: any, index: number) => {
+        console.log(`  ${index + 1}. ${loc.localidad}: ${(loc.risk_score * 100).toFixed(0)}%`);
+      });
       console.log("🔍 === FIN LISTA API ===");
+      
       // ✅ USAR SOLO DATOS DE LA API PARA TOP 5
       const apiTop5 = riskMap
         .sort((a: any, b: any) => b.risk_score - a.risk_score)
@@ -273,7 +272,7 @@ export default function HomeScreen() {
       console.log("🤖 Using API Top 5 (ONLY source)");
       console.log("🏆 API Top 5:", apiTop5.map(z => `${z.localidad}:${(z.risk_score*100).toFixed(0)}%`));
       
-      // 📊 STATS ML DESDE API (MANTENER IGUAL)
+      // 📊 STATS ML DESDE API
       const totalLocalidades = riskMap.length;
       const avgRisk = riskMap.reduce((sum: number, loc: any) => sum + loc.risk_score, 0) / totalLocalidades;
       const highRiskCount = riskMap.filter((loc: any) => loc.risk_score > 0.6).length;
@@ -288,32 +287,30 @@ export default function HomeScreen() {
         confidence: avgRisk > 0.7 ? 'Alta' : avgRisk > 0.4 ? 'Media' : 'Baja'
       });
       
-      // 📍 ZONA DEL USUARIO DESDE API (MANTENER IGUAL)
-      // 📍 ZONA DEL USUARIO DESDE API - CORREGIDO
+      // 📍 ZONA DEL USUARIO DESDE API
       let userZone = riskMap.find((loc: any) => loc.localidad === userLocalidad);
       
       if (!userZone) {
-        // Buscar sin tildes
         console.log(`🔍 Searching ${userLocalidad} without tildes...`);
         const userLocalidadNoTilde = userLocalidad.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         userZone = riskMap.find((loc: any) => {
-            const locSinTilde = loc.localidad.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            return locSinTilde === userLocalidadNoTilde;
+          const locSinTilde = loc.localidad.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          return locSinTilde === userLocalidadNoTilde;
         });
-  
-  if (userZone) {
-    console.log(`✅ Found ${userLocalidad} as ${userZone.localidad} (without tildes)`);
-  }
-}
 
-if (userZone) {
-  console.log(`✅ User zone from API:`, userZone);
-  setUserZoneRisk(userZone);
-} else {
-  console.log(`❌ ${userLocalidad} NOT found in API, creating manual zone...`);
-  const manualZone = createManualUserZone(userLocalidad);
-  setUserZoneRisk(manualZone);
-}
+        if (userZone) {
+          console.log(`✅ Found ${userLocalidad} as ${userZone.localidad} (without tildes)`);
+        }
+      }
+
+      if (userZone) {
+        console.log(`✅ User zone from API:`, userZone);
+        setUserZoneRisk(userZone);
+      } else {
+        console.log(`❌ ${userLocalidad} NOT found in API, creating manual zone...`);
+        const manualZone = createManualUserZone(userLocalidad);
+        setUserZoneRisk(manualZone);
+      }
       
       console.log(`✅ Dashboard loaded successfully from API`);
       
@@ -324,14 +321,14 @@ if (userZone) {
       setTopRiskZones([]);
       setDataSource("ERROR");
       
-      // 📍 Zona usuario fallback (MANTENER FUNCIONAL)
+      // 📍 Zona usuario fallback
       const userLocalidad = isGPSActive && userLocation ? 
         findClosestLocalidad(userLocation.lat, userLocation.lng).localidad : 
         'CHAPINERO';
       const fallbackUserZone = createManualUserZone(userLocalidad);
       setUserZoneRisk(fallbackUserZone);
       
-      // 📊 Stats fallback (MANTENER FUNCIONAL)
+      // 📊 Stats fallback
       setMLStats({
         total_localidades: 20,
         ml_active: false,
@@ -342,7 +339,6 @@ if (userZone) {
         confidence: 'Baja'
       });
       
-      // Mostrar error al usuario SOLO PARA TOP 5
       Alert.alert(
         '🚨 Error Top 5',
         `No se pudo cargar el Top 5 de zonas de riesgo:\n\n${error}\n\nIntenta nuevamente o verifica tu conexión.`,
@@ -357,7 +353,7 @@ if (userZone) {
     }
   };
 
-  // 🔥 CARGAR DATOS AL INICIAR Y CADA 5 MINUTOS (MANTENER IGUAL)
+  // 🔥 CARGAR DATOS AL INICIAR Y CADA 5 MINUTOS
   useEffect(() => {
     loadMLDashboardData();
     
@@ -365,7 +361,7 @@ if (userZone) {
     return () => clearInterval(interval);
   }, [currentHour]);
 
-  // 🎨 FUNCIONES PARA OBTENER COLOR Y EMOJI DE RIESGO (MANTENER IGUAL)
+  // 🎨 FUNCIONES PARA OBTENER COLOR Y EMOJI DE RIESGO
   const getRiskColor = (riskScore: number) => {
     if (riskScore < 0.3) return COLORS.safe;
     if (riskScore < 0.6) return COLORS.warning;
@@ -378,7 +374,7 @@ if (userZone) {
     return '🔴';
   };
 
-  // 🛰️ HANDLER PARA ACTIVAR GPS MANUALMENTE (MANTENER IGUAL)
+  // 🛰️ HANDLER PARA ACTIVAR GPS MANUALMENTE
   const handleGPSToggle = async () => {
     if (isGPSActive) {
       Alert.alert('🛰️ GPS Activo', 'El GPS ya está funcionando correctamente');
@@ -398,7 +394,7 @@ if (userZone) {
       />
       
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* 🎯 Header Épico */}
+        {/* 🎯 Header Épico - SIN EL BOTÓN MAL PUESTO */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -406,7 +402,7 @@ if (userZone) {
           >
             <Text style={styles.backButtonText}>← Welcome</Text>
           </TouchableOpacity>
-          
+
           <Text style={styles.title}>🛡️ Safety Dashboard {mlStats?.ml_active ? '🤖' : '📦'}</Text>
           <Text style={styles.subtitle}>
             {isNight ? '🌙 Noche' : '☀️ Día'} - {currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')}
@@ -417,7 +413,7 @@ if (userZone) {
           </Text>
         </View>
 
-        {/* 📍 Tu Zona Actual CON GPS (MANTENER IGUAL) */}
+        {/* 📍 Tu Zona Actual CON GPS */}
         {userZoneRisk && (
           <TouchableOpacity 
             style={[styles.userZoneCard, { borderLeftColor: getRiskColor(userZoneRisk.risk_score) }]}
@@ -448,7 +444,7 @@ if (userZone) {
           </TouchableOpacity>
         )}
 
-        {/* 📊 Stats ML (MANTENER IGUAL) */}
+        {/* 📊 Stats ML */}
         {mlStats && (
           <View style={styles.statsContainer}>
             <Text style={styles.statsTitle}>📊 Stats ML Tiempo Real</Text>
@@ -488,7 +484,7 @@ if (userZone) {
           </View>
         )}
 
-        {/* 🔥 Top 5 Zonas de Riesgo - SOLO API CON ERROR HANDLING */}
+        {/* 🔥 Top 5 Zonas de Riesgo */}
         <View style={styles.topRiskContainer}>
           <Text style={styles.topRiskTitle}>
             🔥 Top 5 Zonas de Riesgo ({currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')})
@@ -536,7 +532,7 @@ if (userZone) {
           )}
         </View>
 
-        {/* 🗺️ Acceso al mapa (MANTENER IGUAL) */}
+        {/* 🗺️ Acceso al mapa */}
         <TouchableOpacity 
           style={styles.mapCard}
           onPress={() => navigation.navigate('Map' as never)}
@@ -553,7 +549,7 @@ if (userZone) {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* 📈 Features Dashboard (MANTENER IGUAL) */}
+        {/* 📈 Features Dashboard */}
         <View style={styles.featuresGrid}>
           <TouchableOpacity style={styles.featureCard} onPress={loadMLDashboardData} disabled={isLoading}>
             <Text style={styles.featureIcon}>{isLoading ? '⏳' : '🔄'}</Text>
@@ -580,7 +576,7 @@ if (userZone) {
           </View>
         </View>
 
-        {/* 🎯 Quick Actions (MANTENER IGUAL) */}
+        {/* 🎯 Quick Actions - ✅ AQUÍ VA EL BOTÓN DE FENCES */}
         <View style={styles.actionsContainer}>
           <Text style={styles.actionsTitle}>🚀 Acciones Rápidas</Text>
           
@@ -598,12 +594,22 @@ if (userZone) {
             <Text style={styles.actionIcon}>🛰️</Text>
             <Text style={styles.actionText}>{isGPSActive ? 'GPS Funcionando' : 'Activar GPS Automático'}</Text>
           </TouchableOpacity>
+
+          {/* 🏠 ✅ BOTÓN DE FENCES EN SU LUGAR CORRECTO */}
+          <TouchableOpacity 
+            style={styles.actionButton} 
+            onPress={() => navigation.navigate('Fences' as never)}
+          >
+            <Text style={styles.actionIcon}>🏠</Text>
+            <Text style={styles.actionText}>Gestionar Mis Zonas Personales</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
   );
 }
 
+// Todos los styles siguen igual...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -856,7 +862,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
-  // 🚨 Error Card NUEVO
+  // 🚨 Error Card
   errorCard: {
     backgroundColor: '#FFF5F5',
     padding: 20,
@@ -894,7 +900,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // 🗺️ Map Card (MANTENER IGUAL)
+  // 🗺️ Map Card
   mapCard: {
     marginHorizontal: 20,
     marginBottom: 20,
@@ -927,7 +933,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // 📊 Features Grid (MANTENER IGUAL)
+  // 📊 Features Grid
   featuresGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -963,7 +969,7 @@ const styles = StyleSheet.create({
     color: COLORS.secondaryText,
   },
 
-  // 🚀 Actions (MANTENER IGUAL)
+  // 🚀 Actions
   actionsContainer: {
     paddingHorizontal: 20,
     marginBottom: 20,

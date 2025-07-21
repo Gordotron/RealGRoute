@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native'; // 🆕 AGREGAR useRoute
 import { globalMLData, globalDataSource, globalLoadTime } from './HomeScreen';
 
 const { width, height } = Dimensions.get('window');
@@ -27,7 +27,22 @@ const COLORS = {
   shadow: '#C8D6E5',
 };
 
-// 🗺️ Estilo de mapa MEJORADO con más detalles
+// 🆕 Interface para fence específica
+interface MapScreenProps {
+  route?: {
+    params?: {
+      focusFence?: {
+        lat: number;
+        lng: number;
+        radio: number;
+        nombre: string;
+        tipo?: string;
+      }
+    }
+  }
+}
+
+// 🗺️ Estilo de mapa MEJORADO
 const mapStyleDetailed = [
   {
     "elementType": "geometry",
@@ -75,6 +90,9 @@ const mapStyleDetailed = [
 
 export default function MapScreen() {
   const navigation = useNavigation();
+  const route = useRoute() as MapScreenProps['route'];
+  const focusFence = route?.params?.focusFence; // 🎯 Fence específica
+  
   const [selectedZone, setSelectedZone] = useState(null);
   
   // ⏰ HORA CORRECTA COLOMBIA (UTC-5)
@@ -84,6 +102,29 @@ export default function MapScreen() {
   const [localidadesML, setLocalidadesML] = useState<any[]>([]);
   const [dataSource, setDataSource] = useState<string>('unknown');
   const [isLoading, setIsLoading] = useState(false);
+  
+  // 🆕 NUEVO: Estado para región inicial
+  const [initialRegion] = useState(() => {
+    if (focusFence) {
+      // 📍 Si viene una fence específica, centrar ahí
+      console.log(`🎯 Focusing on fence: ${focusFence.nombre} at ${focusFence.lat}, ${focusFence.lng}`);
+      return {
+        latitude: focusFence.lat,
+        longitude: focusFence.lng,
+        latitudeDelta: 0.005, // Zoom más cercano para fence específica
+        longitudeDelta: 0.005,
+      };
+    } else {
+      // 🗺️ Vista general de Bogotá
+      console.log('🗺️ General Bogotá view');
+      return {
+        latitude: 4.6097,
+        longitude: -74.0817,
+        latitudeDelta: 0.25,
+        longitudeDelta: 0.25,
+      };
+    }
+  });
   
   useEffect(() => {
     const timer = setInterval(() => {
@@ -178,17 +219,12 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 🗺️ Mapa principal CON DATOS COMPARTIDOS */}
+      {/* 🗺️ Mapa principal CON DATOS COMPARTIDOS Y FENCE ESPECÍFICA */}
       <MapView
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         customMapStyle={mapStyleDetailed}
-        initialRegion={{
-          latitude: 4.6097,
-          longitude: -74.0817,
-          latitudeDelta: 0.25,
-          longitudeDelta: 0.25,
-        }}
+        initialRegion={initialRegion} // 🆕 Usar región dinámica
         showsUserLocation={true}
         showsMyLocationButton={false}
         showsTraffic={false}
@@ -198,8 +234,8 @@ export default function MapScreen() {
         showsScale={true}
         loadingEnabled={true}
       >
-        {/* 📍 MARCADORES CON DATOS COMPARTIDOS */}
-        {localidadesML.map((localidad, index) => {
+        {/* 🔥 MARCADORES EXISTENTES (solo si no hay fence específica o queremos mostrar ambos) */}
+        {!focusFence && localidadesML.map((localidad, index) => {
           const circleColor = getRiskColor(localidad.risk_score);
           
           return (
@@ -229,9 +265,50 @@ export default function MapScreen() {
             </React.Fragment>
           );
         })}
+        
+        {/* 🎯 FENCE ESPECÍFICA DESTACADA */}
+        {focusFence && (
+          <>
+            {/* ⭕ Círculo principal de la fence */}
+            <Circle
+              center={{
+                latitude: focusFence.lat,
+                longitude: focusFence.lng,
+              }}
+              radius={focusFence.radio}
+              fillColor="rgba(123, 104, 238, 0.2)" // Púrpura transparente
+              strokeColor="#7B68EE"
+              strokeWidth={3}
+              lineDashPattern={[5, 5]} // Línea punteada para destacar
+            />
+            
+            {/* 🎨 Círculo interno para mejor visualización */}
+            <Circle
+              center={{
+                latitude: focusFence.lat,
+                longitude: focusFence.lng,
+              }}
+              radius={focusFence.radio * 0.3}
+              fillColor="rgba(123, 104, 238, 0.4)"
+              strokeColor="#7B68EE"
+              strokeWidth={2}
+            />
+            
+            {/* 📍 Marcador especial de la fence */}
+            <Marker
+              coordinate={{
+                latitude: focusFence.lat,
+                longitude: focusFence.lng,
+              }}
+              title={`🏠 ${focusFence.nombre}`}
+              description={`📏 Radio: ${focusFence.radio}m | 🎨 Tipo: ${focusFence.tipo || 'Personal'}`}
+              pinColor="#7B68EE" // Color destacado
+            />
+          </>
+        )}
       </MapView>
 
-      {/* 🎨 Header con gradiente - ACTUALIZADO */}
+      {/* 🎨 Header con gradiente - ACTUALIZADO PARA FENCE */}
       <LinearGradient
         colors={[COLORS.primaryGradient[0], 'transparent']}
         style={styles.header}
@@ -244,69 +321,125 @@ export default function MapScreen() {
         </TouchableOpacity>
         
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>🗺️ Mapa ML Compartido</Text>
-          <Text style={styles.headerSubtitle}>
-            Colombia: {currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')} {isNight ? '🌙' : '☀️'}
-            {isNight ? ' - Horario Nocturno' : ' - Horario Diurno'}
-          </Text>
-          <Text style={styles.dataSourceBadge}>
-            🌐 Sincronizado: {dataSource} {dataSource === 'API' ? '✅' : dataSource === 'FALLBACK' ? '🔧' : '⏳'}
-          </Text>
+          {focusFence ? (
+            // 🎯 Modo fence específica
+            <>
+              <Text style={styles.headerTitle}>🏠 {focusFence.nombre}</Text>
+              <Text style={styles.headerSubtitle}>
+                📏 Radio: {focusFence.radio}m • 🎨 {focusFence.tipo || 'Personal'}
+              </Text>
+              <Text style={styles.dataSourceBadge}>
+                📍 {focusFence.lat.toFixed(4)}, {focusFence.lng.toFixed(4)}
+              </Text>
+            </>
+          ) : (
+            // 🗺️ Modo mapa general
+            <>
+              <Text style={styles.headerTitle}>🗺️ Mapa ML Compartido</Text>
+              <Text style={styles.headerSubtitle}>
+                Colombia: {currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')} {isNight ? '🌙' : '☀️'}
+                {isNight ? ' - Horario Nocturno' : ' - Horario Diurno'}
+              </Text>
+              <Text style={styles.dataSourceBadge}>
+                🌐 Sincronizado: {dataSource} {dataSource === 'API' ? '✅' : dataSource === 'FALLBACK' ? '🔧' : '⏳'}
+              </Text>
+            </>
+          )}
         </View>
       </LinearGradient>
 
-      {/* 📊 Panel de leyenda - ACTUALIZADO */}
+      {/* 📊 Panel de leyenda - ACTUALIZADO PARA FENCE */}
       <View style={styles.legendPanel}>
-        <Text style={styles.legendTitle}>🛡️ Datos Compartidos</Text>
-        
-        <View style={styles.legendItem}>
-          <View style={[styles.legendColor, { backgroundColor: COLORS.safe }]} />
-          <Text style={styles.legendText}>Seguro (0-30%)</Text>
-        </View>
-        
-        <View style={styles.legendItem}>
-          <View style={[styles.legendColor, { backgroundColor: COLORS.warning }]} />
-          <Text style={styles.legendText}>Precaución (30-60%)</Text>
-        </View>
-        
-        <View style={styles.legendItem}>
-          <View style={[styles.legendColor, { backgroundColor: COLORS.danger }]} />
-          <Text style={styles.legendText}>Alto Riesgo (60%+)</Text>
-        </View>
-        
-        <Text style={styles.legendFooter}>
-          🌐 Mismos datos que Dashboard • {globalLoadTime}
-        </Text>
+        {focusFence ? (
+          // 🎯 Leyenda para fence específica
+          <>
+            <Text style={styles.legendTitle}> Tu Zona</Text>
+            
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#7B68EE' }]} />
+              <Text style={styles.legendText}>{focusFence.nombre}</Text>
+            </View>
+            
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: 'rgba(123, 104, 238, 0.3)' }]} />
+              <Text style={styles.legendText}>Área de cobertura</Text>
+            </View>
+            
+            <Text style={styles.legendFooter}>
+              📏 {focusFence.radio}m de radio
+            </Text>
+          </>
+        ) : (
+          // 🛡️ Leyenda para mapa general (mantener igual)
+          <>
+            <Text style={styles.legendTitle}>🛡️ Datos Compartidos</Text>
+            
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: COLORS.safe }]} />
+              <Text style={styles.legendText}>Seguro (0-30%)</Text>
+            </View>
+            
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: COLORS.warning }]} />
+              <Text style={styles.legendText}>Precaución (30-60%)</Text>
+            </View>
+            
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: COLORS.danger }]} />
+              <Text style={styles.legendText}>Alto Riesgo (60%+)</Text>
+            </View>
+            
+            <Text style={styles.legendFooter}>
+              🌐 Mismos datos que Dashboard • {globalLoadTime}
+            </Text>
+          </>
+        )}
       </View>
 
       {/* 🚀 Botón de acción flotante - ACTUALIZADO */}
       <TouchableOpacity 
         style={styles.fabButton}
         onPress={() => {
-          Alert.alert(
-            '🔍 Debug Datos Compartidos',
-            `Localidades cargadas: ${localidadesML.length}\nFuente: ${dataSource}\nÚltima carga: ${globalLoadTime}\nHora actual: ${currentHour}:${currentMinute.toString().padStart(2, '0')}\nSincronizado con Dashboard: ${localidadesML.length > 0 ? '✅' : '❌'}`
-          );
+          if (focusFence) {
+            Alert.alert(
+              'Zona Personalizada',
+              `Nombre: ${focusFence.nombre}\nTipo: ${focusFence.tipo || 'Personal'}\nRadio: ${focusFence.radio}m\nCoordenadas: ${focusFence.lat.toFixed(4)}, ${focusFence.lng.toFixed(4)}`
+            );
+          } else {
+            Alert.alert(
+              '🔍 Debug Datos Compartidos',
+              `Localidades cargadas: ${localidadesML.length}\nFuente: ${dataSource}\nÚltima carga: ${globalLoadTime}\nHora actual: ${currentHour}:${currentMinute.toString().padStart(2, '0')}\nSincronizado con Dashboard: ${localidadesML.length > 0 ? '✅' : '❌'}`
+            );
+          }
         }}
       >
         <LinearGradient
           colors={[COLORS.accent, '#9575CD']}
           style={styles.fabGradient}
         >
-          <Text style={styles.fabText}>🌐</Text>
+          <Text style={styles.fabText}>{focusFence ? '👀' : '🌐'}</Text>
         </LinearGradient>
       </TouchableOpacity>
 
       {/* 📍 Contador de localidades - ACTUALIZADO */}
       <View style={styles.counterBadge}>
-        <Text style={styles.counterText}>{localidadesML.length} Sincronizadas</Text>
-        <Text style={styles.counterSubtext}>
-          {dataSource === 'API' ? '🤖 ML' : dataSource === 'FALLBACK' ? '🔧 Local' : '⏳ Esperando'}
-        </Text>
+        {focusFence ? (
+          <>
+            <Text style={styles.counterText}>Zona Seleccionada</Text>
+            <Text style={styles.counterSubtext}> ☃ {focusFence.tipo || 'Custom'}</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.counterText}>{localidadesML.length} Sincronizadas</Text>
+            <Text style={styles.counterSubtext}>
+              {dataSource === 'API' ? '🤖 ML' : dataSource === 'FALLBACK' ? '🔧 Local' : '⏳ Esperando'}
+            </Text>
+          </>
+        )}
       </View>
 
-      {/* 🚨 MENSAJE SI NO HAY DATOS */}
-      {localidadesML.length === 0 && (
+      {/* 🚨 MENSAJE SI NO HAY DATOS (solo en modo general) */}
+      {!focusFence && localidadesML.length === 0 && (
         <View style={styles.noDataOverlay}>
           <View style={styles.noDataCard}>
             <Text style={styles.noDataIcon}>⏳</Text>

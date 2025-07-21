@@ -28,3 +28,10 @@ urllib3==2.5.0
 uvicorn==0.35.0
 matplotlib==3.9.3
 seaborn==0.13.2
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.20
+cryptography==41.0.7
+bcrypt==4.0.1
+# 🆕 EMAIL VALIDATION
+email-validator==2.1.0

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, Body
+from fastapi import FastAPI, HTTPException, Query, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -11,6 +11,18 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi.responses import JSONResponse
 
+# 🆕 IMPORTAR SISTEMA DE AUTH
+from auth import (
+    AuthManager, 
+    UserRegistration, 
+    UserLogin, 
+    UserProfile, 
+    TokenResponse,
+    get_current_user,
+    get_current_user_optional,
+    auth_manager
+)
+
 # Variables globales
 predictor = None
 intelligent_router = None
@@ -19,7 +31,7 @@ intelligent_router = None
 async def lifespan(app: FastAPI):
     global predictor, intelligent_router
 
-    print("🚀 Iniciando RealGRoute 3.0 - Balanced Intelligence + Smart Routing Edition...")
+    print("🚀 Iniciando RealGRoute 3.0 - Balanced Intelligence + Smart Routing + Auth Edition...")
     print("=" * 80)
 
     try:
@@ -36,11 +48,17 @@ async def lifespan(app: FastAPI):
         print("\n🛣️ Inicializando ROUTER INTELIGENTE...")
         intelligent_router = IntelligentRouter(predictor, verbose=True)
 
+        # 🛡️ INICIALIZAR SISTEMA DE AUTH
+        print("\n🛡️ Inicializando SISTEMA DE AUTENTICACIÓN...")
+        print(f"✅ Auth Manager: JWT tokens configurados")
+        print(f"✅ Users file: {auth_manager.users_file}")
+
         print("=" * 80)
-        print("🎉 RealGRoute 3.0 COMPLETO listo!")
+        print("🎉 RealGRoute 3.0 COMPLETO + AUTH listo!")
         print(f"🧠 Modelo: {len(predictor.municipio_to_id)} municipios, {len(predictor.feature_columns)} features")
         print(f"🛣️ Router: Grid {intelligent_router._get_grid_size()}, resolución {intelligent_router.grid_resolution * 111:.0f}m")
         print(f"🎯 Zonas: {len(predictor.zone_classifier)} tipos configurados")
+        print(f"🛡️ Auth: Sistema JWT completo")
         print("🌐 Documentación: http://localhost:8000/docs")
         print("=" * 80)
 
@@ -63,7 +81,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Safe Routes API",
-    version="3.0.0 - Balanced Intelligence + Smart Routing Edition",
+    version="3.0.0 - Balanced Intelligence + Smart Routing + Auth Edition",
     lifespan=lifespan
 )
 
@@ -74,6 +92,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 🆕 =============== MODELOS ACTUALIZADOS CON AUTH ===============
 
 class RiskRequest(BaseModel):
     municipio: str
@@ -99,14 +119,14 @@ class UserFeedbackCrimeRequest(BaseModel):
     tipo: str
     comentario: str
     fecha: str
-    usuario: Optional[str] = None
+    # 🚫 REMOVIDO: usuario (ahora viene del token JWT)
 
 class UserFencingZoneRequest(BaseModel):
     lat: float
     lng: float
     radio: float
     nombre: str
-    usuario: str
+    # 🚫 REMOVIDO: usuario (ahora viene del token JWT)
 
 class RouteRequest(BaseModel):
     origen: str
@@ -135,6 +155,7 @@ class RouteResponse(BaseModel):
     destination_info: dict
     model_type: str = "intelligent_routing_v3.0"
 
+# 🗺️ COORDENADAS (mantener igual)
 LOCALIDADES_COORDS = {
     'USAQUEN': {'lat': 4.7030, 'lng': -74.0350},
     'CHAPINERO': {'lat': 4.6590, 'lng': -74.0630},
@@ -157,6 +178,63 @@ LOCALIDADES_COORDS = {
     'CIUDAD BOLIVAR': {'lat': 4.4940, 'lng': -74.1430},
 }
 
+# 🆕 =============== ENDPOINTS DE AUTENTICACIÓN ===============
+
+@app.post("/register", response_model=UserProfile)
+async def register_user(registration: UserRegistration):
+    """🛡️ Registrar nuevo usuario"""
+    try:
+        user_data = auth_manager.create_user(registration)
+        return UserProfile(**user_data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en registro: {str(e)}")
+
+@app.post("/login", response_model=TokenResponse)
+async def login_user(login_data: UserLogin):
+    """🔐 Iniciar sesión y obtener token JWT"""
+    try:
+        user = auth_manager.authenticate_user(login_data.username, login_data.password)
+        
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Credenciales incorrectas"
+            )
+        
+        # Crear token JWT
+        access_token = auth_manager.create_access_token(
+            data={"sub": user["username"]}
+        )
+        
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            expires_in=60 * 24 * 7,  # 7 días en minutos
+            user=UserProfile(**user)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en login: {str(e)}")
+
+@app.get("/me", response_model=UserProfile)
+async def get_current_user_profile(current_user: dict = Depends(get_current_user)):
+    """👤 Obtener perfil del usuario autenticado"""
+    return UserProfile(**current_user)
+
+@app.get("/validate-token")
+async def validate_token(current_user: dict = Depends(get_current_user)):
+    """✅ Validar si el token es válido"""
+    return {
+        "valid": True,
+        "username": current_user["username"],
+        "message": "Token válido"
+    }
+
+# =============== ENDPOINTS EXISTENTES (SIN CAMBIOS) ===============
+
 @app.get("/")
 async def root():
     is_balanced = hasattr(predictor, 'train_balanced_model') if predictor else False
@@ -164,22 +242,24 @@ async def root():
     has_official_data = os.path.exists('data/security/security_points_processed.csv')
 
     return {
-        "message": "RealGRoute 3.0 - Balanced Intelligence + Smart Routing! 🧠🛣️",
-        "status": "✅ Sistema completo" if (predictor and is_balanced and has_intelligent_router) else "⚠️ Sistema parcial",
+        "message": "RealGRoute 3.0 - Balanced Intelligence + Smart Routing + Auth! 🧠🛣️🛡️",
+        "status": "✅ Sistema completo + Auth" if (predictor and is_balanced and has_intelligent_router) else "⚠️ Sistema parcial",
         "model_type": "Balanced Hybrid v3.0" if is_balanced else "Basic v2.0",
         "routing_type": "Intelligent Grid-Based v3.0" if has_intelligent_router else "Basic",
+        "auth_system": "✅ JWT Authentication Active",
         "municipios": len(predictor.municipio_to_id) if predictor else 0,
         "zones": len(predictor.zone_classifier) if predictor and is_balanced else 0,
         "features": len(predictor.feature_columns) if predictor and hasattr(predictor, 'feature_columns') else 6,
         "grid_resolution": f"{intelligent_router.grid_resolution * 111:.0f}m" if has_intelligent_router else "N/A",
         "official_data": "✅ Datos oficiales integrados" if has_official_data else "⚠️ Solo datos sintéticos",
-        "version": "3.0.0 - Balanced Intelligence + Smart Routing Edition",
-        "intelligence_level": "🧠 Arquitectura Zonal Balanceada + Router Inteligente" if (is_balanced and has_intelligent_router) else "📊 Básica",
+        "version": "3.0.0 - Balanced Intelligence + Smart Routing + Auth Edition",
+        "intelligence_level": "🧠 Arquitectura Zonal Balanceada + Router Inteligente + Auth JWT" if (is_balanced and has_intelligent_router) else "📊 Básica",
         "capabilities": {
             "risk_prediction": "✅ Balanceada" if is_balanced else "⚠️ Básica",
             "intelligent_routing": "✅ Grid-based" if has_intelligent_router else "❌ No disponible",
             "zone_classification": "✅ 3 tipos" if is_balanced else "❌ No disponible",
-            "safety_optimization": "✅ Multicriterio" if has_intelligent_router else "❌ No disponible"
+            "safety_optimization": "✅ Multicriterio" if has_intelligent_router else "❌ No disponible",
+            "user_authentication": "✅ JWT completo"
         }
     }
 
@@ -188,26 +268,31 @@ async def health_check():
     global predictor, intelligent_router
 
     if not predictor:
-        return {"api_status": "❌ Offline", "model_status": "❌ No cargado", "router_status": "❌ No disponible"}
+        return {"api_status": "❌ Offline", "model_status": "❌ No cargado", "router_status": "❌ No disponible", "auth_status": "❌ No disponible"}
 
     is_balanced = hasattr(predictor, 'train_balanced_model')
     has_intelligent_router = intelligent_router is not None
 
     model_status = "✅ Balanceado funcionando" if is_balanced else "⚠️ Básico activo"
     router_status = "✅ Router inteligente activo" if has_intelligent_router else "❌ Router no disponible"
+    auth_status = "✅ JWT Auth activo"
 
     return {
         "api_status": "✅ Online",
         "model_status": model_status,
         "router_status": router_status,
+        "auth_status": auth_status,
         "model_type": "Balanced Hybrid v3.0" if is_balanced else "Basic v2.0",
         "routing_type": "Intelligent Grid-Based v3.0" if has_intelligent_router else "Basic",
+        "auth_type": "JWT Bearer Token",
         "municipios": len(predictor.municipio_to_id) if hasattr(predictor, 'municipio_to_id') else 0,
         "zones": len(predictor.zone_classifier) if is_balanced else 0,
         "features": len(predictor.feature_columns) if hasattr(predictor, 'feature_columns') else 0,
         "grid_size": intelligent_router._get_grid_size() if has_intelligent_router else "N/A",
-        "timestamp": "2025-07-21 01:48:39"
+        "timestamp": "2025-07-21 08:19:12"
     }
+
+# =============== ENDPOINTS ML/ROUTING (SIN CAMBIOS) ===============
 
 @app.post("/predict-risk", response_model=RiskResponse)
 async def predict_risk(request: RiskRequest):
@@ -312,6 +397,328 @@ async def get_risk_map(hora: int = 12, dia_semana: int = 1):
         "model_type": "balanced_hybrid_v3.0" if is_balanced else "basic_v2.0"
     }
 
+# =============== ENDPOINTS PROTEGIDOS CON AUTH ===============
+
+@app.post("/user-feedback-crime")
+async def user_feedback_crime(
+    request: UserFeedbackCrimeRequest,
+    current_user: dict = Depends(get_current_user)  # PROTEGIDO
+):
+    """✍️ Crear feedback de crimen (requiere autenticación)"""
+    # Validar campos mínimos
+    if (
+        request.lat is None or request.lng is None or
+        not request.tipo or not request.comentario or not request.fecha
+    ):
+        raise HTTPException(status_code=400, detail="Faltan campos obligatorios.")
+    
+    # Crear directorio si no existe
+    os.makedirs("data", exist_ok=True)
+    csv_path = "data/user_feedback_crime.csv"
+    
+    # Preparar fila CON USUARIO AUTENTICADO
+    row = {
+        "lat": request.lat,
+        "lng": request.lng,
+        "tipo": request.tipo,
+        "comentario": request.comentario,
+        "fecha": request.fecha,
+        "usuario": current_user["username"],  # DEL TOKEN JWT
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Guardar en CSV
+    header = not os.path.exists(csv_path)
+    df = pd.DataFrame([row])
+    df.to_csv(csv_path, mode='a', header=header, index=False)
+    
+    return {
+        "status": "success",
+        "message": "Feedback almacenado correctamente.",
+        "row": row
+    }
+
+@app.post("/user-fencing-zone")
+async def save_user_fencing_zone(
+    request: UserFencingZoneRequest,
+    current_user: dict = Depends(get_current_user)  # PROTEGIDO
+):
+    """🏠 Crear zona personalizada (requiere autenticación)"""
+    os.makedirs("data", exist_ok=True)
+    csv_path = "data/user_fencing_zones.csv"
+    
+    # Preparar fila CON USUARIO AUTENTICADO
+    row = {
+        "lat": request.lat,
+        "lng": request.lng,
+        "radio": request.radio,
+        "nombre": request.nombre,
+        "usuario": current_user["username"],  # DEL TOKEN JWT
+        "created_at": datetime.now().isoformat()
+    }
+    
+    # Guardar en CSV
+    header = not os.path.exists(csv_path)
+    df = pd.DataFrame([row])
+    df.to_csv(csv_path, mode='a', header=header, index=False)
+    
+    return {"status": "success", "zone": row}
+
+@app.get("/user-feedback-crime")
+async def get_user_feedback_crime(
+    skip: int = 0,
+    limit: int = 100,
+    tipo: Optional[str] = None,
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)  # PROTEGIDO
+):
+    """📋 Listar mis feedbacks (solo del usuario autenticado)"""
+    csv_path = "data/user_feedback_crime.csv"
+    if not os.path.exists(csv_path):
+        return {"feedbacks": [], "total": 0}
+
+    df = pd.read_csv(csv_path)
+
+    # FILTRAR SOLO FEEDBACKS DEL USUARIO AUTENTICADO
+    df = df[df["usuario"] == current_user["username"]]
+
+    # Filtros adicionales
+    if tipo:
+        df = df[df["tipo"] == tipo]
+    if fecha_desde:
+        df = df[df["fecha"] >= fecha_desde]
+    if fecha_hasta:
+        df = df[df["fecha"] <= fecha_hasta]
+
+    total = len(df)
+    # Paginación
+    feedbacks = df.iloc[skip: skip + limit].to_dict(orient="records")
+    return {"feedbacks": feedbacks, "total": total}
+
+@app.get("/user-fencing-zone")
+async def get_user_fencing_zones(
+    nombre: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    current_user: dict = Depends(get_current_user)
+):
+    """📍 Listar mis zonas (solo del usuario autenticado)"""
+    try:
+        print(f"🔍 DEBUG: Getting zones for user: {current_user.get('username', 'UNKNOWN')}")
+        
+        csv_path = "data/user_fencing_zones.csv"
+        print(f"🔍 DEBUG: Looking for CSV at: {csv_path}")
+        
+        if not os.path.exists(csv_path):
+            print("🔍 DEBUG: CSV file does not exist, creating empty one")
+            # Crear CSV con headers correctos
+            os.makedirs('data', exist_ok=True)
+            pd.DataFrame(columns=['lat', 'lng', 'radio', 'nombre', 'usuario', 'createdAt']).to_csv(csv_path, index=False)
+            return {"zones": [], "total": 0}
+
+        print("🔍 DEBUG: Reading CSV file...")
+        # ✅ LECTURA ROBUSTA CON MANEJO DE ERRORES
+        try:
+            df = pd.read_csv(csv_path)
+        except pd.errors.ParserError as parse_error:
+            print(f"❌ DEBUG: CSV Parse Error: {parse_error}")
+            print("🔄 DEBUG: Recreating CSV with correct headers...")
+            # Recrear CSV limpio
+            pd.DataFrame(columns=['lat', 'lng', 'radio', 'nombre', 'usuario', 'createdAt']).to_csv(csv_path, index=False)
+            return {"zones": [], "total": 0}
+        
+        print(f"🔍 DEBUG: CSV loaded, total rows: {len(df)}")
+        print(f"🔍 DEBUG: CSV columns: {df.columns.tolist()}")
+        
+        # Verificar que tenga las columnas necesarias
+        required_columns = ['lat', 'lng', 'radio', 'nombre', 'usuario', 'createdAt']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            print(f"❌ DEBUG: Missing columns: {missing_columns}")
+            print("🔄 DEBUG: Recreating CSV with correct headers...")
+            pd.DataFrame(columns=required_columns).to_csv(csv_path, index=False)
+            return {"zones": [], "total": 0}
+        
+        if len(df) > 0:
+            print(f"🔍 DEBUG: Sample data: {df.head()}")
+
+        # FILTRAR SOLO ZONAS DEL USUARIO AUTENTICADO
+        user_username = current_user.get("username", "")
+        print(f"🔍 DEBUG: Filtering by username: '{user_username}'")
+        
+        df_filtered = df[df["usuario"] == user_username]
+        print(f"🔍 DEBUG: After user filter: {len(df_filtered)} rows")
+
+        # Filtros adicionales
+        if nombre:
+            df_filtered = df_filtered[df_filtered["nombre"] == nombre]
+            print(f"🔍 DEBUG: After name filter: {len(df_filtered)} rows")
+
+        total = len(df_filtered)
+        print(f"🔍 DEBUG: Total zones for user: {total}")
+        
+        # Paginación
+        zones = df_filtered.iloc[skip: skip + limit].to_dict(orient="records")
+        print(f"🔍 DEBUG: Returning {len(zones)} zones")
+        
+        return {"zones": zones, "total": total}
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Exception in get_user_fencing_zones: {e}")
+        print(f"❌ DEBUG: Exception type: {type(e)}")
+        import traceback
+        print(f"❌ DEBUG: Traceback: {traceback.format_exc()}")
+        return {"zones": [], "total": 0, "error": str(e)}  # ✅ NO LANZAR ERROR, DEVOLVER VACÍO
+
+@app.get("/debug-csv")
+async def debug_csv():
+    """🔍 Debug endpoint para ver el contenido del CSV"""
+    try:
+        csv_path = "data/user_fencing_zones.csv"
+        
+        if not os.path.exists(csv_path):
+            return {"message": "CSV file does not exist", "path": csv_path}
+        
+        import pandas as pd
+        df = pd.read_csv(csv_path)
+        
+        return {
+            "csv_exists": True,
+            "path": csv_path,
+            "total_rows": len(df),
+            "columns": df.columns.tolist(),
+            "sample_data": df.head().to_dict(orient="records") if len(df) > 0 else [],
+            "all_usernames": df["usuario"].unique().tolist() if "usuario" in df.columns else []
+        }
+    except Exception as e:
+        return {"error": str(e), "type": str(type(e))}
+
+@app.delete("/user-feedback-crime")
+async def delete_user_feedback_crime(
+    timestamp: str = Body(...),
+    current_user: dict = Depends(get_current_user)  # 🛡️ PROTEGIDO
+):
+    """🗑️ Borrar mi feedback (solo el propio)"""
+    csv_path = "data/user_feedback_crime.csv"
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="No hay feedbacks")
+
+    df = pd.read_csv(csv_path)
+    original_total = len(df)
+    
+    # SOLO PERMITIR BORRAR FEEDBACKS PROPIOS
+    df = df[~((df["usuario"] == current_user["username"]) & (df["timestamp"] == timestamp))]
+    df.to_csv(csv_path, index=False)
+    deleted = original_total - len(df)
+    return {"status": "success" if deleted else "not found", "deleted": deleted}
+
+@app.delete("/user-fencing-zone")
+async def delete_user_fencing_zone(
+    request: dict = Body(...),  # ✅ RECIBIR COMO OBJETO
+    current_user: dict = Depends(get_current_user)
+):
+    """🗑️ Eliminar zona personal"""
+    try:
+        nombre = request.get("nombre")  # ✅ EXTRAER EL NOMBRE
+        if not nombre:
+            raise HTTPException(status_code=400, detail="Nombre requerido")
+            
+        print(f"🗑️ DEBUG: Deleting zone '{nombre}' for user '{current_user['username']}'")
+        
+        csv_path = "data/user_fencing_zones.csv"
+        if not os.path.exists(csv_path):
+            raise HTTPException(status_code=404, detail="No hay zonas")
+
+        df = pd.read_csv(csv_path)
+        original_total = len(df)
+        print(f"🗑️ DEBUG: Original total: {original_total}")
+        
+        # Filtrar: eliminar solo si es del usuario actual Y con ese nombre
+        df_filtered = df[~((df["usuario"] == current_user["username"]) & (df["nombre"] == nombre))]
+        print(f"🗑️ DEBUG: After filter: {len(df_filtered)}")
+        
+        df_filtered.to_csv(csv_path, index=False)
+        deleted = original_total - len(df_filtered)
+        
+        print(f"🗑️ DEBUG: Deleted {deleted} zones")
+        
+        return {
+            "status": "success" if deleted > 0 else "not found", 
+            "deleted": deleted,
+            "message": f"Zona '{nombre}' eliminada" if deleted > 0 else f"Zona '{nombre}' no encontrada"
+        }
+    except Exception as e:
+        print(f"❌ DEBUG: Error deleting zone: {e}")
+        raise HTTPException(status_code=500, detail=f"Error eliminando zona: {str(e)}")
+
+@app.put("/user-feedback-crime")
+async def update_user_feedback_crime(
+    timestamp: str = Body(...),
+    comentario: Optional[str] = Body(None),
+    tipo: Optional[str] = Body(None),
+    current_user: dict = Depends(get_current_user)  # 🛡️ PROTEGIDO
+):
+    """✏️ Editar mi feedback (solo el propio)"""
+    csv_path = "data/user_feedback_crime.csv"
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="No hay feedbacks")
+
+    df = pd.read_csv(csv_path)
+    
+    # SOLO PERMITIR EDITAR FEEDBACKS PROPIOS
+    mask = (df["usuario"] == current_user["username"]) & (df["timestamp"] == timestamp)
+    if not mask.any():
+        raise HTTPException(status_code=404, detail="Feedback no encontrado o no autorizado")
+
+    if comentario:
+        df.loc[mask, "comentario"] = comentario
+    if tipo:
+        df.loc[mask, "tipo"] = tipo
+
+    df.to_csv(csv_path, index=False)
+    return {"status": "success", "updated": df[mask].to_dict(orient="records")}
+
+@app.put("/user-fencing-zone")
+async def update_user_fencing_zone(
+    nombre: str = Body(...),
+    nuevo_nombre: Optional[str] = Body(None),
+    nuevo_radio: Optional[float] = Body(None),
+    nueva_descripcion: Optional[str] = Body(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """✏️ Editar zona personal"""
+    try:
+        csv_path = "data/user_fencing_zones.csv"
+        if not os.path.exists(csv_path):
+            raise HTTPException(status_code=404, detail="No hay zonas")
+
+        df = pd.read_csv(csv_path)
+        mask = (df["usuario"] == current_user["username"]) & (df["nombre"] == nombre)
+        
+        if not mask.any():
+            raise HTTPException(status_code=404, detail="Zona no encontrada")
+
+        # Actualizar campos
+        if nuevo_nombre:
+            df.loc[mask, "nombre"] = nuevo_nombre
+        if nuevo_radio is not None:
+            df.loc[mask, "radio"] = nuevo_radio
+        if nueva_descripcion is not None:
+            df.loc[mask, "descripcion"] = nueva_descripcion
+
+        df.to_csv(csv_path, index=False)
+        
+        updated_zone = df[mask].to_dict(orient="records")[0]
+        return {"status": "success", "updated": updated_zone}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error actualizando zona: {str(e)}")
+# =============== ENDPOINTS SIN AUTH (PÚBLICOS) ===============
+
 @app.post("/smart-route")
 async def get_smart_route(request: RouteRequest):
     global predictor
@@ -366,188 +773,6 @@ async def get_smart_route(request: RouteRequest):
         "model_type": "basic_routing",
         "note": "💡 Para routing inteligente usa /intelligent-route"
     }
-
-@app.post("/user-feedback-crime")
-async def user_feedback_crime(request: UserFeedbackCrimeRequest):
-    # Validar campos mínimos (permite 0.0 en lat/lng, pero no None)
-    if (
-        request.lat is None or request.lng is None or
-        not request.tipo or not request.comentario or not request.fecha
-    ):
-        raise HTTPException(status_code=400, detail="Faltan campos obligatorios.")
-    
-    # Crear directorio si no existe
-    os.makedirs("data", exist_ok=True)
-    csv_path = "data/user_feedback_crime.csv"
-    
-    # Preparar fila
-    row = {
-        "lat": request.lat,
-        "lng": request.lng,
-        "tipo": request.tipo,
-        "comentario": request.comentario,
-        "fecha": request.fecha,
-        "usuario": request.usuario if request.usuario else "",
-        "timestamp": datetime.now().isoformat()
-    }
-    
-    # Guardar en CSV (agregar encabezado si es nuevo)
-    header = not os.path.exists(csv_path)
-    df = pd.DataFrame([row])
-    df.to_csv(csv_path, mode='a', header=header, index=False)
-    
-    return {
-        "status": "success",
-        "message": "Feedback almacenado correctamente.",
-        "row": row
-    }
-
-@app.post("/user-fencing-zone")
-async def save_user_fencing_zone(request: UserFencingZoneRequest):
-    
-    os.makedirs("data", exist_ok=True)
-    csv_path = "data/user_fencing_zones.csv"
-    row = request.dict()
-    # Guardar en CSV (append, header si es nuevo)
-    header = not os.path.exists(csv_path)
-    df = pd.DataFrame([row])
-    df.to_csv(csv_path, mode='a', header=header, index=False)
-    return {"status": "success", "zone": row}
-
-@app.get("/user-feedback-crime")
-async def get_user_feedback_crime(
-    skip: int = 0,
-    limit: int = 100,
-    usuario: Optional[str] = None,
-    tipo: Optional[str] = None,
-    fecha_desde: Optional[str] = None,
-    fecha_hasta: Optional[str] = None,
-):
-
-    csv_path = "data/user_feedback_crime.csv"
-    if not os.path.exists(csv_path):
-        return {"feedbacks": [], "total": 0}
-
-    df = pd.read_csv(csv_path)
-
-    # Filtros
-    if usuario:
-        df = df[df["usuario"] == usuario]
-    if tipo:
-        df = df[df["tipo"] == tipo]
-    if fecha_desde:
-        df = df[df["fecha"] >= fecha_desde]
-    if fecha_hasta:
-        df = df[df["fecha"] <= fecha_hasta]
-
-    total = len(df)
-    # Paginación
-    feedbacks = df.iloc[skip: skip + limit].to_dict(orient="records")
-    return {"feedbacks": feedbacks, "total": total}
-
-@app.get("/user-fencing-zone")
-async def get_user_fencing_zones(
-    usuario: Optional[str] = None,
-    nombre: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 100
-):
-    csv_path = "data/user_fencing_zones.csv"
-    if not os.path.exists(csv_path):
-        return {"zones": [], "total": 0}
-
-    df = pd.read_csv(csv_path)
-
-    # Filtros
-    if usuario:
-        df = df[df["usuario"] == usuario]
-    if nombre:
-        df = df[df["nombre"] == nombre]
-
-    total = len(df)
-    # Paginación
-    zones = df.iloc[skip: skip + limit].to_dict(orient="records")
-    return {"zones": zones, "total": total}
-
-@app.delete("/user-feedback-crime")
-async def delete_user_feedback_crime(
-    usuario: str = Body(...),
-    timestamp: str = Body(...)
-):
-    csv_path = "data/user_feedback_crime.csv"
-    if not os.path.exists(csv_path):
-        raise HTTPException(status_code=404, detail="No hay feedbacks")
-
-    df = pd.read_csv(csv_path)
-    original_total = len(df)
-    df = df[~((df["usuario"] == usuario) & (df["timestamp"] == timestamp))]
-    df.to_csv(csv_path, index=False)
-    deleted = original_total - len(df)
-    return {"status": "success" if deleted else "not found", "deleted": deleted}
-
-@app.delete("/user-fencing-zone")
-async def delete_user_fencing_zone(
-    usuario: str = Body(...),
-    nombre: str = Body(...)
-):
-    csv_path = "data/user_fencing_zones.csv"
-    if not os.path.exists(csv_path):
-        raise HTTPException(status_code=404, detail="No hay zonas")
-
-    df = pd.read_csv(csv_path)
-    original_total = len(df)
-    df = df[~((df["usuario"] == usuario) & (df["nombre"] == nombre))]
-    df.to_csv(csv_path, index=False)
-    deleted = original_total - len(df)
-    return {"status": "success" if deleted else "not found", "deleted": deleted}
-
-@app.put("/user-feedback-crime")
-async def update_user_feedback_crime(
-    usuario: str = Body(...),
-    timestamp: str = Body(...),
-    comentario: Optional[str] = Body(None),
-    tipo: Optional[str] = Body(None)
-):
-    csv_path = "data/user_feedback_crime.csv"
-    if not os.path.exists(csv_path):
-        raise HTTPException(status_code=404, detail="No hay feedbacks")
-
-    df = pd.read_csv(csv_path)
-    mask = (df["usuario"] == usuario) & (df["timestamp"] == timestamp)
-    if not mask.any():
-        raise HTTPException(status_code=404, detail="Feedback no encontrado")
-
-    if comentario:
-        df.loc[mask, "comentario"] = comentario
-    if tipo:
-        df.loc[mask, "tipo"] = tipo
-
-    df.to_csv(csv_path, index=False)
-    return {"status": "success", "updated": df[mask].to_dict(orient="records")}
-
-@app.put("/user-fencing-zone")
-async def update_user_fencing_zone(
-    usuario: str = Body(...),
-    nombre: str = Body(...),
-    nuevo_radio: Optional[float] = Body(None),
-    nuevo_nombre: Optional[str] = Body(None)
-):
-    csv_path = "data/user_fencing_zones.csv"
-    if not os.path.exists(csv_path):
-        raise HTTPException(status_code=404, detail="No hay zonas")
-
-    df = pd.read_csv(csv_path)
-    mask = (df["usuario"] == usuario) & (df["nombre"] == nombre)
-    if not mask.any():
-        raise HTTPException(status_code=404, detail="Zona no encontrada")
-
-    if nuevo_radio is not None:
-        df.loc[mask, "radio"] = nuevo_radio
-    if nuevo_nombre is not None:
-        df.loc[mask, "nombre"] = nuevo_nombre
-
-    df.to_csv(csv_path, index=False)
-    return {"status": "success", "updated": df[mask].to_dict(orient="records")}
 
 @app.post("/intelligent-route", response_model=RouteResponse)
 async def get_intelligent_route(request: IntelligentRouteRequest):
