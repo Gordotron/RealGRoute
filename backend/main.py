@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Query, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import pandas as pd
 from hybrid_risk_model import BalancedHybridRiskPredictor
@@ -10,6 +10,7 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi.responses import JSONResponse
+import math
 
 # 🆕 IMPORTAR SISTEMA DE AUTH
 from auth import (
@@ -155,6 +156,17 @@ class RouteResponse(BaseModel):
     destination_info: dict
     model_type: str = "intelligent_routing_v3.0"
 
+# 🛣️ MODELO PARA COORDENADAS LIBRES
+class RouteRequestCoordinates(BaseModel):
+    origen_lat: float
+    origen_lng: float
+    destino_lat: float
+    destino_lng: float
+    hora: int = Field(ge=0, le=23)
+    dia_semana: int = Field(ge=1, le=7)
+    preferencia: str = Field(pattern="^(seguridad|tiempo)$")
+    sensibilidad_riesgo: float = Field(ge=0.0, le=1.0)
+
 # 🗺️ COORDENADAS (mantener igual)
 LOCALIDADES_COORDS = {
     'USAQUEN': {'lat': 4.7030, 'lng': -74.0350},
@@ -292,6 +304,218 @@ async def health_check():
         "timestamp": "2025-07-21 08:19:12"
     }
 
+@app.post("/intelligent-route-coordinates")
+async def intelligent_route_coordinates(request: RouteRequestCoordinates):
+    """
+    🧠 RUTA INTELIGENTE CON COORDENADAS LIBRES
+    Calcula la mejor ruta entre dos puntos específicos usando IA
+    """
+    try:
+        print(f"🛣️ Calculating route from coordinates...")
+        print(f"📍 Origen: {request.origen_lat}, {request.origen_lng}")
+        print(f"🎯 Destino: {request.destino_lat}, {request.destino_lng}")
+
+        # 🔍 CONVERTIR COORDENADAS A LOCALIDADES CERCANAS
+        origen_localidad = find_closest_localidad(request.origen_lat, request.origen_lng)
+        destino_localidad = find_closest_localidad(request.destino_lat, request.destino_lng)
+        
+    
+        print(f"📍 Origen en localidad: {origen_localidad}")
+        print(f"🎯 Destino en localidad: {destino_localidad}")
+        
+        
+        # 📊 OBTENER DATOS DE RIESGO
+        risk_data = load_risk_data()
+        
+        # 🎯 INFORMACIÓN DE ORIGEN
+        origen_info = {
+            "localidad": origen_localidad,
+            "risk_score": risk_data.get(origen_localidad, {}).get('risk_score', 0.5),
+            "zone_type": get_zone_type(risk_data.get(origen_localidad, {}).get('risk_score', 0.5))
+        }
+        
+        # 🎯 INFORMACIÓN DE DESTINO  
+        destino_info = {
+            "localidad": destino_localidad,
+            "risk_score": risk_data.get(destino_localidad, {}).get('risk_score', 0.5),
+            "zone_type": get_zone_type(risk_data.get(destino_localidad, {}).get('risk_score', 0.5))
+        }
+        
+        # 🛣️ GENERAR PUNTOS DE RUTA (simulado con línea recta + variaciones)
+        route_points = generate_route_points(
+            request.origen_lat, request.origen_lng,
+            request.destino_lat, request.destino_lng,
+            request.preferencia
+        )
+        
+        # 📏 CALCULAR ESTADÍSTICAS
+        distancia = calculate_distance(
+            request.origen_lat, request.origen_lng,
+            request.destino_lat, request.destino_lng
+        )
+        
+        tiempo_base = distancia * 3  # ~3 min por km en ciudad
+        riesgo_promedio = (origen_info['risk_score'] + destino_info['risk_score']) / 2
+        
+        # ⚡ AJUSTES POR PREFERENCIA
+        if request.preferencia == "tiempo":
+            tiempo_estimado = tiempo_base * 0.9  # 10% más rápido
+            riesgo_ajustado = riesgo_promedio * 1.2  # Pero más riesgo
+        else:  # seguridad
+            tiempo_estimado = tiempo_base * 1.1  # 10% más lento
+            riesgo_ajustado = riesgo_promedio * 0.8  # Pero menos riesgo
+        
+        # 🧠 RECOMENDACIONES IA
+        recommendations = generate_ai_recommendations(
+            origen_info, destino_info, request.preferencia, 
+            request.sensibilidad_riesgo, request.hora
+        )
+        
+        # 📊 RESPUESTA COMPLETA
+        route_response = {
+            "route_points": route_points,
+            "statistics": {
+                "distancia": round(distancia, 2),
+                "tiempo": int(tiempo_estimado),
+                "risk_score": round(riesgo_ajustado, 2)
+            },
+            "origin_info": origen_info,
+            "destination_info": destino_info,
+            "recommendations": recommendations,
+            "metadata": {
+                "preferencia": request.preferencia,
+                "sensibilidad": request.sensibilidad_riesgo,
+                "hora": request.hora,
+                "dia_semana": request.dia_semana
+            }
+        }
+        
+        print(f"✅ Route calculated successfully: {distancia:.1f}km, {int(tiempo_estimado)}min")
+        return route_response
+        
+    except Exception as e:
+        print(f"❌ Error in intelligent route coordinates: {e}")
+        raise HTTPException(status_code=500, detail=f"Error calculating route: {str(e)}")
+
+# 🔍 FUNCIÓN AUXILIAR: ENCONTRAR LOCALIDAD MÁS CERCANA
+def find_closest_localidad(lat: float, lng: float) -> str:
+    """Encuentra la localidad más cercana a unas coordenadas"""
+    
+    # 🗺️ CENTROIDES APROXIMADOS DE LOCALIDADES BOGOTÁ
+    localidades_coords = {
+        "USAQUEN": (4.6947, -74.0306),
+        "CHAPINERO": (4.6492, -74.0628),
+        "SANTA FE": (4.6126, -74.0705),
+        "SAN CRISTOBAL": (4.5699, -74.0973),
+        "USME": (4.4789, -74.1361),
+        "TUNJUELITO": (4.5615, -74.1419),
+        "BOSA": (4.6150, -74.1958),
+        "KENNEDY": (4.6280, -74.1553),
+        "FONTIBON": (4.6872, -74.1435),
+        "ENGATIVA": (4.7544, -74.1147),
+        "SUBA": (4.7570, -74.0840),
+        "BARRIOS UNIDOS": (4.6690, -74.0810),
+        "TEUSAQUILLO": (4.6309, -74.0927),
+        "LOS MARTIRES": (4.6017, -74.0987),
+        "ANTONIO NARIÑO": (4.5893, -74.1065),
+        "PUENTE ARANDA": (4.6140, -74.1213),
+        "LA CANDELARIA": (4.5968, -74.0759),
+        "RAFAEL URIBE URIBE": (4.5571, -74.1139),
+        "CIUDAD BOLIVAR": (4.5038, -74.1797)
+    }
+    
+    min_distance = float('inf')
+    closest_localidad = "TEUSAQUILLO"  # Default
+    
+    for localidad, (loc_lat, loc_lng) in localidades_coords.items():
+        distance = calculate_distance(lat, lng, loc_lat, loc_lng)
+        if distance < min_distance:
+            min_distance = distance
+            closest_localidad = localidad
+    
+    return closest_localidad
+
+# 🛣️ FUNCIÓN AUXILIAR: GENERAR PUNTOS DE RUTA
+def generate_route_points(origen_lat: float, origen_lng: float, 
+                         destino_lat: float, destino_lng: float, 
+                         preferencia: str) -> list:
+    """Genera puntos de ruta entre origen y destino"""
+    
+    import random
+    
+    points = []
+    num_points = 8  # Número de puntos intermedios
+    
+    for i in range(num_points + 2):  # +2 para incluir origen y destino
+        if i == 0:
+            # Punto de origen
+            points.append({"lat": origen_lat, "lng": origen_lng})
+        elif i == num_points + 1:
+            # Punto de destino
+            points.append({"lat": destino_lat, "lng": destino_lng})
+        else:
+            # Puntos intermedios con interpolación lineal + variación
+            progress = i / (num_points + 1)
+            
+            base_lat = origen_lat + (destino_lat - origen_lat) * progress
+            base_lng = origen_lng + (destino_lng - origen_lng) * progress
+            
+            # Agregar variación según preferencia
+            if preferencia == "tiempo":
+                # Ruta más directa, menos variación
+                variation = 0.002
+            else:  # seguridad
+                # Ruta más segura, más variación para evitar zonas
+                variation = 0.004
+            
+            lat_variation = (random.random() - 0.5) * variation
+            lng_variation = (random.random() - 0.5) * variation
+            
+            points.append({
+                "lat": base_lat + lat_variation,
+                "lng": base_lng + lng_variation
+            })
+    
+    return points
+
+# 🧠 FUNCIÓN AUXILIAR: RECOMENDACIONES IA
+def generate_ai_recommendations(origen_info: dict, destino_info: dict, 
+                               preferencia: str, sensibilidad: float, hora: int) -> list:
+    """Genera recomendaciones inteligentes basadas en el contexto"""
+    
+    recommendations = []
+    
+    # 🕐 RECOMENDACIONES POR HORA
+    if 22 <= hora or hora <= 5:
+        recommendations.append("🌙 Es horario nocturno - considera usar transporte público o taxi")
+    elif 7 <= hora <= 9 or 17 <= hora <= 19:
+        recommendations.append("🚦 Hora pico - considera rutas alternas o diferir el viaje")
+    
+    # 🎯 RECOMENDACIONES POR ORIGEN
+    if origen_info['risk_score'] > 0.7:
+        recommendations.append(f"⚠️ Tu origen ({origen_info['localidad']}) tiene alto riesgo - mantente alerta")
+    elif origen_info['risk_score'] < 0.3:
+        recommendations.append(f"✅ Tu origen ({origen_info['localidad']}) es una zona segura")
+    
+    # 🎯 RECOMENDACIONES POR DESTINO
+    if destino_info['risk_score'] > 0.7:
+        recommendations.append(f"🚨 Tu destino ({destino_info['localidad']}) requiere precaución extra")
+    elif destino_info['risk_score'] < 0.3:
+        recommendations.append(f"🛡️ Tu destino ({destino_info['localidad']}) es una zona segura")
+    
+    # 🎯 RECOMENDACIONES POR PREFERENCIA
+    if preferencia == "tiempo":
+        recommendations.append("⚡ Ruta optimizada para velocidad - mantente en vías principales")
+    else:
+        recommendations.append("🛡️ Ruta optimizada para seguridad - evita zonas de riesgo")
+    
+    # 🎯 RECOMENDACIONES POR SENSIBILIDAD
+    if sensibilidad > 0.8:
+        recommendations.append("🔒 Alta sensibilidad - considera transporte público en zonas complejas")
+    elif sensibilidad < 0.3:
+        recommendations.append("🚀 Baja sensibilidad - puedes usar rutas más directas")
+    
+    return recommendations[:4]  # Máximo 4 recomendaciones
 # =============== ENDPOINTS ML/ROUTING (SIN CAMBIOS) ===============
 
 @app.post("/predict-risk", response_model=RiskResponse)
@@ -597,10 +821,14 @@ async def debug_csv():
 
 @app.delete("/user-feedback-crime")
 async def delete_user_feedback_crime(
-    timestamp: str = Body(...),
-    current_user: dict = Depends(get_current_user)  # 🛡️ PROTEGIDO
+    request: dict = Body(...),  # ✅ RECIBIR COMO DICT
+    current_user: dict = Depends(get_current_user)
 ):
     """🗑️ Borrar mi feedback (solo el propio)"""
+    timestamp = request.get("timestamp")  # ✅ EXTRAER TIMESTAMP
+    if not timestamp:
+        raise HTTPException(status_code=400, detail="Timestamp requerido")
+        
     csv_path = "data/user_feedback_crime.csv"
     if not os.path.exists(csv_path):
         raise HTTPException(status_code=404, detail="No hay feedbacks")
@@ -933,6 +1161,57 @@ async def rebuild_model():
             }
         except Exception as fallback_error:
             raise HTTPException(status_code=500, detail=f"Error total: {str(fallback_error)}")
+# 🔧 FUNCIONES AUXILIARES FALTANTES
 
+def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Calcula distancia entre dos puntos en km usando fórmula haversine"""
+    R = 6371  # Radio de la Tierra en km
+    
+    lat1_rad = math.radians(lat1)
+    lat2_rad = math.radians(lat2)
+    delta_lat = math.radians(lat2 - lat1)
+    delta_lng = math.radians(lng2 - lng1)
+    
+    a = (math.sin(delta_lat/2) * math.sin(delta_lat/2) + 
+         math.cos(lat1_rad) * math.cos(lat2_rad) * 
+         math.sin(delta_lng/2) * math.sin(delta_lng/2))
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    
+    return R * c
+
+def load_risk_data() -> dict:
+    """Carga datos de riesgo simulados"""
+    return {
+        'USAQUEN': {'risk_score': 0.2},
+        'CHAPINERO': {'risk_score': 0.3},
+        'SANTA FE': {'risk_score': 0.8},
+        'SAN CRISTOBAL': {'risk_score': 0.9},
+        'USME': {'risk_score': 0.7},
+        'TUNJUELITO': {'risk_score': 0.4},
+        'BOSA': {'risk_score': 0.6},
+        'KENNEDY': {'risk_score': 0.4},
+        'FONTIBON': {'risk_score': 0.3},
+        'ENGATIVA': {'risk_score': 0.3},
+        'SUBA': {'risk_score': 0.2},
+        'BARRIOS UNIDOS': {'risk_score': 0.2},
+        'TEUSAQUILLO': {'risk_score': 0.2},
+        'LOS MARTIRES': {'risk_score': 0.9},
+        'ANTONIO NARIÑO': {'risk_score': 0.4},
+        'PUENTE ARANDA': {'risk_score': 0.4},
+        'LA CANDELARIA': {'risk_score': 0.8},
+        'RAFAEL URIBE URIBE': {'risk_score': 0.6},
+        'CIUDAD BOLIVAR': {'risk_score': 0.8},
+    }
+
+def get_zone_type(risk_score: float) -> str:
+    """Determina el tipo de zona basado en el riesgo"""
+    if risk_score < 0.3:
+        return "SAFE_ZONE"
+    elif risk_score < 0.7:
+        return "MODERATE_ZONE" 
+    else:
+        return "HIGH_RISK_ZONE"
+
+# 🚀 AQUÍ VA EL if __name__ == "__main__":
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

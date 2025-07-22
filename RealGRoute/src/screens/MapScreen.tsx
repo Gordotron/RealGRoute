@@ -102,6 +102,7 @@ export default function MapScreen() {
   const [localidadesML, setLocalidadesML] = useState<any[]>([]);
   const [dataSource, setDataSource] = useState<string>('unknown');
   const [isLoading, setIsLoading] = useState(false);
+  const [showLocalityAreas, setShowLocalityAreas] = useState(true);
   
   // 🆕 NUEVO: Estado para región inicial
   const [initialRegion] = useState(() => {
@@ -235,7 +236,7 @@ export default function MapScreen() {
         loadingEnabled={true}
       >
         {/* 🔥 MARCADORES EXISTENTES (solo si no hay fence específica o queremos mostrar ambos) */}
-        {!focusFence && localidadesML.map((localidad, index) => {
+        {!focusFence && showLocalityAreas && localidadesML.map((localidad, index) =>  {
           const circleColor = getRiskColor(localidad.risk_score);
           
           return (
@@ -313,6 +314,15 @@ export default function MapScreen() {
         colors={[COLORS.primaryGradient[0], 'transparent']}
         style={styles.header}
       >
+        <TouchableOpacity 
+         style={styles.colorToggleButtonCenter}
+          onPress={() => setShowLocalityAreas(!showLocalityAreas)}
+        >
+          <Text style={styles.colorToggleText}>
+            {showLocalityAreas ? 'O' : 'M'}
+           </Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -341,7 +351,7 @@ export default function MapScreen() {
                 {isNight ? ' - Horario Nocturno' : ' - Horario Diurno'}
               </Text>
               <Text style={styles.dataSourceBadge}>
-                🌐 Sincronizado: {dataSource} {dataSource === 'API' ? '✅' : dataSource === 'FALLBACK' ? '🔧' : '⏳'}
+                🌐 Sincronizado: {dataSource} {dataSource === 'API' ? '' : dataSource === 'FALLBACK' ? '🔧' : '⏳'}
               </Text>
             </>
           )}
@@ -430,7 +440,7 @@ export default function MapScreen() {
           </>
         ) : (
           <>
-            <Text style={styles.counterText}>{localidadesML.length} Sincronizadas</Text>
+            <Text style={styles.counterText}>{localidadesML.length} Sync</Text>
             <Text style={styles.counterSubtext}>
               {dataSource === 'API' ? '🤖 ML' : dataSource === 'FALLBACK' ? '🔧 Local' : '⏳ Esperando'}
             </Text>
@@ -590,30 +600,32 @@ const styles = StyleSheet.create({
 
   // 📍 Counter Badge ACTUALIZADO
   counterBadge: {
-    position: 'absolute',
-    top: 140,
-    right: 20,
-    backgroundColor: COLORS.accent,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 15,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-    alignItems: 'center',
-  },
-  counterText: {
-    color: COLORS.lightText,
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  counterSubtext: {
-    color: COLORS.lightText,
-    fontSize: 10,
-    opacity: 0.8,
-  },
+  position: 'absolute',
+  top: 200, // Más abajo (era 140)
+  right: 20,
+  backgroundColor: COLORS.accent,
+  paddingHorizontal: 8, // Más pequeño (era 12)
+  paddingVertical: 6, // Más pequeño (era 8)
+  borderRadius: 12, // Más pequeño (era 15)
+  shadowColor: COLORS.shadow,
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.2,
+  shadowRadius: 4,
+  elevation: 4,
+  alignItems: 'center',
+},
+
+counterText: {
+  color: COLORS.lightText,
+  fontSize: 10, // Más pequeño (era 12)
+  fontWeight: 'bold',
+},
+
+counterSubtext: {
+  color: COLORS.lightText,
+  fontSize: 8, // Más pequeño (era 10)
+  opacity: 0.8,
+},
 
   // 🚨 No Data Overlay
   noDataOverlay: {
@@ -666,5 +678,45 @@ const styles = StyleSheet.create({
     color: COLORS.lightText,
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  // Agregar estos estilos al final, antes del });
+  colorToggleButtonCenter: {
+    position: 'absolute',
+    left: 10,
+    top: '100%', // ← Centro exacto vertical
+    transform: [{ translateY: -10 }], // ← Ajuste fino para centrar perfectamente
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 10, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 1000,
+  },
+  colorToggleText: {
+    color: '#333',
+    fontWeight: 'bold',
+    fontSize: 18, // Un poco más grande para que se vea bien
+    textAlign: 'center',
+  },
+
+  toggleIndicator: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  discreteToggleText: {
+    fontSize: 12,
+    color: '#6A6A8A',
+    fontWeight: '600',
   },
 });

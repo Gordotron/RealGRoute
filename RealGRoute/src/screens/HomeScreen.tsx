@@ -3,11 +3,12 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'rea
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
-
+import { Linking } from 'react-native';
 // 🚀 DATOS GLOBALES COMPARTIDOS CON MAPSCREEN
 export let globalMLData: any[] = [];
 export let globalDataSource: string = 'unknown';
 export let globalLoadTime: string = '';
+import { safeRoutesAPI } from '../services/api';
 
 const COLORS = {
   primaryGradient: ['#E8F4F8', '#F0F8FF'],
@@ -64,10 +65,29 @@ const LOCALIDADES_COORDS = {
   'SUMAPAZ': { lat: 4.2700, lng: -74.2400 },
 };
 
+// AGREGAR DESPUÉS DE const COLORS = {...}
+const PASTEL_COLORS = {
+  primaryGradient: ['#F8F4FF', '#F0F8FF', '#F5F8FA'],
+  mintGreen: '#E8F5E8',
+  lavender: '#F0E6FF', 
+  peach: '#FFE8E0',
+  skyBlue: '#E5F4FF',
+  rosePink: '#FFE5F1',
+  lemonYellow: '#FFF9E5',
+  softPurple: '#F0F0FF',
+  border: '#E8E8F0',
+  shadow: '#D8D8E8',
+  darkText: '#4A4A6A',
+  mediumText: '#6A6A8A',
+  lightText: '#8A8AAA',
+  cardBg: '#FDFDFF',
+  white: '#FFFFFF',
+};
+
 export default function HomeScreen() {
   const navigation = useNavigation();
   
-  // 🔥 ESTADOS ÉPICOS CON GPS
+  // ESTADOS CON GPS
   const [currentTime, setCurrentTime] = useState(new Date());
   const [mlStats, setMLStats] = useState<MLStats | null>(null);
   const [topRiskZones, setTopRiskZones] = useState<LocalidadRisk[]>([]);
@@ -77,8 +97,9 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [gpsDistance, setGpsDistance] = useState<string | null>(null);
   const [dataSource, setDataSource] = useState<string>('unknown');
-  
-  // ⏰ Actualizar tiempo cada minuto
+  const [apiInfo, setApiInfo] = useState<any>(null);
+
+  // Actualizar tiempo cada minuto
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -86,7 +107,11 @@ export default function HomeScreen() {
     
     return () => clearInterval(timer);
   }, []);
-  
+
+  useEffect(() => {
+    safeRoutesAPI.getApiInfo().then(setApiInfo);
+  }, []);
+
   const currentHour = currentTime.getHours();
   const currentMinute = currentTime.getMinutes();
   const isNight = currentHour >= 18 || currentHour <= 6;
@@ -231,7 +256,7 @@ export default function HomeScreen() {
       
       // 🚀 SOLO API - SIN FALLBACKS DINÁMICOS PARA TOP 5
       console.log("🤖 Calling API (ONLY source for Top 5)...");
-      const response = await fetch(`http://192.168.2.9:8000/risk-map?hora=12&dia_semana=1`);
+      const response = await fetch(`http://192.168.0.19:8000/risk-map?hora=12&dia_semana=1`);
       
       if (!response.ok) {
         throw new Error(`API Error: ${response.status} ${response.statusText}`);
@@ -563,20 +588,27 @@ export default function HomeScreen() {
             <Text style={styles.featureValue}>{isGPSActive ? 'Activo' : 'Activar'}</Text>
           </TouchableOpacity>
 
-          <View style={styles.featureCard}>
+        
+          <TouchableOpacity
+            style={styles.featureCard}
+            onPress={() => {
+              Alert.alert(
+                '🚨 Emergencia',
+                '¿Llamar al número de emergencias 123?',
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { text: 'Llamar', onPress: () => Linking.openURL('tel:123') }
+                ]
+              );
+            }}
+          >
             <Text style={styles.featureIcon}>🚨</Text>
             <Text style={styles.featureTitle}>Emergencia</Text>
             <Text style={styles.featureValue}>SOS Rápido</Text>
-          </View>
-
-          <View style={styles.featureCard}>
-            <Text style={styles.featureIcon}>📊</Text>
-            <Text style={styles.featureTitle}>Fuente</Text>
-            <Text style={styles.featureValue}>{dataSource}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
-        {/* 🎯 Quick Actions - ✅ AQUÍ VA EL BOTÓN DE FENCES */}
+        {/* Quick Actions - AQUÍ VA EL BOTÓN DE FENCES */}
         <View style={styles.actionsContainer}>
           <Text style={styles.actionsTitle}>🚀 Acciones Rápidas</Text>
           
@@ -585,14 +617,43 @@ export default function HomeScreen() {
             <Text style={styles.actionText}>Ver Mapa ML en Tiempo Real</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionIcon}>🛣️</Text>
-            <Text style={styles.actionText}>Planear Ruta Segura</Text>
+          <TouchableOpacity
+            style={styles.featureCard} // MISMO estilo que los otros
+            onPress={() => {
+              let msg = '';
+              if (apiInfo) {
+                msg =
+                  `Versión: ${apiInfo.version}\n` +
+                  `Modelo: ${apiInfo.model_type}\n` +
+                  `Routing: ${apiInfo.routing_type}\n` +
+                  `Autenticación: ${apiInfo.auth_system}\n` +
+                  `Datos oficiales: ${apiInfo.official_data}\n` +
+                  `Capacidades:\n` +
+                  Object.entries(apiInfo.capabilities).map(([k, v]) => `• ${k}: ${v}`).join('\n');
+              } else {
+                msg = 'No se pudo obtener la información de la API en este momento.';
+              }
+              Alert.alert(
+                'ℹ️ Info API',
+                msg,
+                [
+                  { text: 'Cerrar', style: 'cancel' },
+                  { text: 'Reintentar', onPress: () => safeRoutesAPI.getApiInfo().then(setApiInfo) }
+                ]
+              );
+            }}
+          >
+            <Text style={styles.featureIcon}>ℹ️</Text>
+            <Text style={styles.featureTitle}>Info API</Text>
+            <Text style={styles.featureValue}>{apiInfo ? apiInfo.version : '...'}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionButton} onPress={handleGPSToggle}>
-            <Text style={styles.actionIcon}>🛰️</Text>
-            <Text style={styles.actionText}>{isGPSActive ? 'GPS Funcionando' : 'Activar GPS Automático'}</Text>
+          <TouchableOpacity 
+          style={styles.actionButton} 
+          onPress={() => navigation.navigate('Feedback' as never)}
+          >
+            <Text style={styles.actionIcon}>🗣️</Text>
+            <Text style={styles.actionText}>Dar Realimentación</Text>
           </TouchableOpacity>
 
           {/* 🏠 ✅ BOTÓN DE FENCES EN SU LUGAR CORRECTO */}
@@ -605,6 +666,17 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <TouchableOpacity 
+        style={styles.navigationGradientButton}
+        onPress={() => navigation.navigate('Navigation' as never)}
+      >
+        <LinearGradient
+          colors={[PASTEL_COLORS.skyBlue, PASTEL_COLORS.lavender]}
+          style={styles.navigationGradient}
+        >
+        <Text style={styles.navigationGradientText}>🗺️ Navegación Inteligente</Text>
+      </LinearGradient>
+    </TouchableOpacity>
     </View>
   );
 }
@@ -1001,5 +1073,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.primaryText,
     fontWeight: '500',
+  },
+    navigationButton: {
+    backgroundColor: PASTEL_COLORS.skyBlue,
+    borderRadius: 16,
+    padding: 16,
+    marginVertical: 8,
+    marginHorizontal: 20,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: PASTEL_COLORS.border,
+    shadowColor: PASTEL_COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  navigationText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: PASTEL_COLORS.darkText,
+  },
+  // 🎨 O si prefieres con gradiente:
+  navigationGradientButton: {
+    borderRadius: 16,
+    marginVertical: 8,
+    marginHorizontal: 20,
+    shadowColor: PASTEL_COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+    overflow: 'hidden',
+  },
+  navigationGradient: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  navigationGradientText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: PASTEL_COLORS.darkText,
   },
 });

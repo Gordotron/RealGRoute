@@ -8,6 +8,10 @@ import MapScreen from './src/screens/MapScreen';
 import FencesScreen from './src/screens/FencesScreen';
 import CreateFenceScreen from './src/screens/CreateFenceScreen';
 import EditFenceScreen from './src/screens/EditFenceScreen';
+import FeedbackScreen from './src/screens/FeedbackScreen';
+import CreateFeedbackScreen from './src/screens/CreateFeedbackScreen';
+import NavigationScreen from './src/screens/NavigationScreen'; 
+import EditFeedbackScreen from './src/screens/EditFeedbackScreen';
 
 const Stack = createStackNavigator();
 
@@ -25,6 +29,10 @@ export default function App() {
         <Stack.Screen name="Fences" component={FencesScreen} />
         <Stack.Screen name="CreateFence" component={CreateFenceScreen} />
         <Stack.Screen name="EditFence" component={EditFenceScreen} />
+        <Stack.Screen name="Feedback" component={FeedbackScreen} />
+        <Stack.Screen name="CreateFeedback" component={CreateFeedbackScreen} />
+        <Stack.Screen name="Navigation" component={NavigationScreen} />
+        <Stack.Screen name="EditFeedback" component={EditFeedbackScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -79,7 +79,7 @@ export interface SecurityPoint {
 
 export class SafeRoutesAPI {
   private baseURL = __DEV__ 
-    ? 'http://192.168.2.9:8000'
+    ? 'http://192.168.0.19:8000'
     : 'https://api.realgroute.com';
 
   // 🔑 CONSTANTES PARA STORAGE
@@ -88,7 +88,16 @@ export class SafeRoutesAPI {
 
   // 🌐 Configuración base CON AUTH AUTOMÁTICO
   // En la función makeRequest, actualizar el manejo de errores:
-
+  async getApiInfo(): Promise<any> {
+    try {
+      const response = await this.makeRequest('/');
+      return response;
+    } catch (error) {
+      console.error('❌ Error getting API info:', error);
+      return null;
+    }
+  }
+  
   private async makeRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
     try {
       console.log(`🌐 API Call: ${this.baseURL}${endpoint}`);
@@ -107,7 +116,14 @@ export class SafeRoutesAPI {
 
       // 🔍 LOG DEL REQUEST BODY PARA DEBUG
       if (options?.body) {
-        console.log(`📤 Request body:`, JSON.parse(options.body as string));
+       // 🎯 VERIFICAR SI ES JSON VÁLIDO ANTES DE PARSEAR
+        try {
+          const parsed = JSON.parse(options.body as string);
+          console.log(`📤 Request body (JSON):`, parsed);
+        } catch {
+          // Si no es JSON válido, mostrarlo como string
+          console.log(`📤 Request body (String):`, options.body);
+        }
       }
 
       const response = await fetch(`${this.baseURL}${endpoint}`, {
@@ -166,45 +182,79 @@ export class SafeRoutesAPI {
   }
 
   // 🗑️ Eliminar zona
-async deleteZone(nombre: string): Promise<{status: string, deleted: number}> {
-  try {
-    console.log(`🗑️ Deleting zone: ${nombre}`);
+  async deleteZone(nombre: string): Promise<{status: string, deleted: number}> {
+    try {
+      console.log(`🗑️ Deleting zone: ${nombre}`);
     
-    const data = await this.makeRequest<{status: string, deleted: number}>('/user-fencing-zone', {
+      const data = await this.makeRequest<{status: string, deleted: number}>('/user-fencing-zone', {
+        method: 'DELETE',
+        body: JSON.stringify({ nombre })
+      });
+
+      console.log(`✅ Zone deleted: ${nombre}`);
+      return data;
+    } catch (error) {
+      console.error('❌ Error deleting zone:', error);
+      throw error;
+    }
+  }
+
+  async getIntelligentRoute(routeRequest: any): Promise<any> {
+    console.log('🛣️ Getting intelligent route...');
+    console.log('📋 Route request:', routeRequest);
+  
+    // 🔧 USAR EL NUEVO ENDPOINT DE COORDENADAS
+    const response = await this.makeRequest('/intelligent-route-coordinates', {
+      method: 'POST',
+      body: JSON.stringify(routeRequest)
+    });
+
+    console.log('✅ Intelligent route obtained');
+    return response;
+  }
+
+  // 🗑️ Eliminar feedback
+  async deleteFeedback(feedbackId: string): Promise<any> {
+    console.log(`🗑️ Deleting feedback with ID: ${feedbackId}`);
+  
+    // 🎯 ENVIAR COMO OBJETO JSON (igual que deleteZone)
+    const response = await this.makeRequest(`/user-feedback-crime`, {
       method: 'DELETE',
-      body: JSON.stringify({ nombre })
+      body: JSON.stringify({ timestamp: feedbackId })
     });
 
-    console.log(`✅ Zone deleted: ${nombre}`);
-    return data;
-  } catch (error) {
-    console.error('❌ Error deleting zone:', error);
-    throw error;
+    console.log(`✅ Feedback deleted successfully`);
+    return response;
   }
-}
 
-// ✏️ Editar zona
-async updateZone(nombre: string, updates: {
-  nuevo_nombre?: string;
-  nuevo_radio?: number;
-  nueva_descripcion?: string;
-}): Promise<{status: string, updated: any}> {
-  try {
-    console.log(`✏️ Updating zone: ${nombre}`, updates);
+  // Editar zona
+  async updateZone(nombre: string, updates: {
+    nuevo_nombre?: string;
+    nuevo_radio?: number;
+    nueva_descripcion?: string;
+  }): Promise<{status: string,  updated: any}> {
+    try {
+      console.log(`✏️ Updating zone: ${nombre}`, updates);
     
-    const data = await this.makeRequest<{status: string, updated: any}>('/user-fencing-zone', {
-      method: 'PUT',
-      body: JSON.stringify({ nombre, ...updates })
-    });
+      const data = await this.makeRequest<{status: string, updated: any}>('/user-fencing-zone', {
+        method: 'PUT',
+        body: JSON.stringify({ nombre, ...updates })
+      });
 
-    console.log(`✅ Zone updated: ${nombre}`);
-    return data;
-  } catch (error) {
-    console.error('❌ Error updating zone:', error);
-    throw error;
+      console.log(`✅ Zone updated: ${nombre}`);
+      return data;
+    } catch (error) {
+      console.error('❌ Error updating zone:', error);
+      throw error;
+    }
   }
-}
 
+  async updateFeedback({ timestamp, comentario, tipo }: { timestamp: string, comentario: string, tipo: string }) {
+    return this.makeRequest('/user-feedback-crime', {
+      method: 'PUT',
+      body: JSON.stringify({ timestamp, comentario, tipo }),
+    });
+  }
   // 🔑 =============== MÉTODOS DE AUTENTICACIÓN ===============
 
   async register(userData: UserRegistration): Promise<UserProfile> {

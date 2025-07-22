@@ -1,3 +1,4 @@
 username,email,password_hash,full_name,phone,created_at,last_login,is_active
 dcastillosi,dcastillosi@gmail.com,$2b$12$Di2UlzgYErABXUf3DR1sNOE6YWQVCfvUS..MglMzUsVJggse4My1W,Daniel Castillo,+57 300 123 4567,2025-07-21T08:39:33.724725,2025-07-21T08:39:57.407693,True
 buenas,buenas@gmail.com,$2b$12$/EUAoOufXIknPVdu2j0Pn.sfPFqQpP/5ujY3V8qfnhYh0hHq9fXJ6,Buenas,3197184939,2025-07-21T09:08:31.820445,2025-07-21T09:11:20.688713,True
+hola,hola@gmail.com,$2b$12$wDGgW4No27HY5zsWE7h8fOlyLYM3WCOK5oDAFD9rybwhS1MkHD9wq,Hola,3197184939,2025-07-22T01:49:35.014947,2025-07-22T12:49:50.572374,True
