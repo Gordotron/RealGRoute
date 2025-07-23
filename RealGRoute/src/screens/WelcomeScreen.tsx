@@ -22,7 +22,7 @@ export default function WelcomeScreen() {
   const navigation = useNavigation();
 
   useEffect(() => {
-    // 🚀 Transición automática después de 2 segundos
+    // Transición automática después de 2 segundos
     const timer = setTimeout(() => {
       navigation.navigate('Login' as never);
     }, 2000);
@@ -39,7 +39,7 @@ export default function WelcomeScreen() {
       
       <View style={styles.content}>
         <View style={styles.logoContainer}>
-          <Text style={styles.logoIcon}>🛡️</Text>
+          <Text style={styles.logoIcon}>🧠</Text>
         </View>
         <Text style={styles.appName}>RealGRoute</Text>
         <Text style={styles.subtitle}>Navigate Safely in Bogotá</Text>

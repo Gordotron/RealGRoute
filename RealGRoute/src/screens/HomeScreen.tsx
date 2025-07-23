@@ -378,7 +378,7 @@ export default function HomeScreen() {
     }
   };
 
-  // 🔥 CARGAR DATOS AL INICIAR Y CADA 5 MINUTOS
+  // CARGAR DATOS AL INICIAR Y CADA 5 MINUTOS
   useEffect(() => {
     loadMLDashboardData();
     
